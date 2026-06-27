@@ -1,0 +1,9 @@
+datasets
+huggingface_hub
+pandas
+pyarrow
+duckdb
+scikit-learn
+tqdm
+streamlit
+joblib
