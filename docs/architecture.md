@@ -34,6 +34,17 @@ espaces client / fournisseur / administrateur / Data & ML / guide
 - `data/silver` : donnees nettoyees.
 - `data/gold` : donnees pretes pour l'API et les espaces applicatifs.
 
+Tables Gold globales :
+
+```text
+data/gold/product_kpis/
+data/gold/supplier_kpis/
+data/gold/category_kpis/
+data/gold/global_dashboard/
+data/gold/problematic_products/
+data/gold/recommendations/
+```
+
 Si les donnees reelles ne sont pas presentes, le pipeline genere un jeu de donnees de demonstration multi-categories pour permettre une execution locale rapide.
 
 ## Relation logique

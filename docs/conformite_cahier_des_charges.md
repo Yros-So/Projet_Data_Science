@@ -10,7 +10,7 @@ Ce document relie le projet aux criteres attendus dans le sujet : dataset massif
 | Dataset Big Data | Amazon Reviews 2023, base pilote Amazon_Fashion puis multi-categories controle avec All_Beauty et Appliances. Le dataset complet contient plusieurs centaines de millions d'avis ; le projet montre une montee en charge progressive. |
 | Stockage | Architecture Bronze/Silver/Gold en fichiers Parquet ; PostgreSQL optionnel pour les tables finales. |
 | ETL | Pipeline `backend/etl/etl_spark.py` generique par categorie avec `domain`, `global_product_id`, sentiment, jointure et KPIs. |
-| Qualite donnees | Rapport `data/gold/data_quality_report.json` avec colonnes attendues, null rates, notes valides et unicite produits. |
+| Qualite donnees | Rapport `data/gold/global_dashboard/data_quality_report.json` avec colonnes attendues, null rates, notes valides et unicite produits. |
 | ML supervise | Analyse de sentiment avec baseline, Naive Bayes et Logistic Regression. |
 | Recommandation | Similarite de contenu TF-IDF + confiance + popularite + score de recommandation. |
 | Evaluation | Metrics JSON, comparaison de modeles et matrice de confusion dans `models/metrics/`. |
