@@ -14,6 +14,7 @@ Ce document relie le projet aux criteres attendus dans le sujet : dataset massif
 | ML supervise | Analyse de sentiment avec baseline, Naive Bayes et Logistic Regression. |
 | Recommandation | Similarite de contenu TF-IDF + confiance + popularite + score de recommandation. |
 | Evaluation | Metrics JSON, comparaison de modeles et matrice de confusion dans `models/metrics/`. |
+| API | FastAPI separee par routes, avec lecture `auto` depuis PostgreSQL si disponible ou fichiers Gold sinon. |
 | Interface | Next.js/React avec espaces separes : client, fournisseur, administrateur, Data & ML et guide. |
 | Reproductibilite | Scripts `scripts/run_pipeline.py`, `scripts/smoke_test.py`, tests `pytest`, `.env.example` et README. |
 
@@ -91,6 +92,14 @@ recommendations
 global_dashboard
 data_quality_report
 ```
+
+FastAPI peut ensuite lire ces tables avec :
+
+```text
+API_DATA_SOURCE=postgres
+```
+
+En mode par defaut `auto`, l'API lit PostgreSQL si les tables sont disponibles, sinon elle continue avec les fichiers Gold locaux.
 
 ## Evaluation Machine Learning
 

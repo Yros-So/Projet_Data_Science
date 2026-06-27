@@ -16,6 +16,7 @@ def test_api_core_endpoints():
     client = TestClient(app)
 
     assert client.get("/health").status_code == 200
+    assert "data_source" in client.get("/health").json()
 
     dashboard = client.get("/admin/dashboard")
     assert dashboard.status_code == 200
@@ -26,6 +27,13 @@ def test_api_core_endpoints():
     product_payload = products.json()
     assert len(product_payload) > 0
     assert "global_product_id" in product_payload[0]
+
+    filtered_products = client.get("/products?domain=Amazon_Fashion&sentiment=positif&year=2023&risk=faible&limit=5")
+    assert filtered_products.status_code == 200
+
+    filter_options = client.get("/filters/options")
+    assert filter_options.status_code == 200
+    assert "domains" in filter_options.json()
 
     categories = client.get("/categories/performance")
     assert categories.status_code == 200

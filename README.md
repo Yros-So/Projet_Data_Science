@@ -149,6 +149,14 @@ API locale :
 - documentation Swagger : <http://127.0.0.1:8000/docs>
 - health check : <http://127.0.0.1:8000/health>
 
+Source des donnees API :
+
+```text
+API_DATA_SOURCE=auto      # PostgreSQL si disponible, sinon fichiers Gold
+API_DATA_SOURCE=files     # force la lecture des fichiers data/gold
+API_DATA_SOURCE=postgres  # force la lecture PostgreSQL
+```
+
 Endpoints principaux :
 
 ```text
@@ -160,6 +168,7 @@ GET  /products
 GET  /products/{global_product_id}
 GET  /products/{global_product_id}/recommendations
 GET  /recommendations/{global_product_id}
+GET  /filters/options
 GET  /categories
 GET  /categories/performance
 GET  /categories/{category_id}/products
@@ -170,6 +179,12 @@ GET  /suppliers/{supplier_id}/problematic-products
 GET  /suppliers/{supplier_id}/negative-reviews
 POST /sentiment/predict
 POST /pipeline/run
+```
+
+Exemple de filtres catalogue :
+
+```text
+GET /products?domain=Amazon_Fashion&supplier=Urban%20Mode&sentiment=positif&risk=faible&year=2023&sort_by=confiance
 ```
 
 ## Etape 3 - Lancer le frontend Next.js

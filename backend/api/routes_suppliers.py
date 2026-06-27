@@ -3,14 +3,41 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.data_access import records, table
+from backend.api.query_filters import filter_exact, filter_risk, sort_frame
 
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
 
 @router.get("")
-def list_suppliers(limit: int = Query(default=25, ge=1, le=100)):
-    suppliers = table("supplier_kpis").sort_values("supplier_score", ascending=False).head(limit)
+def list_suppliers(
+    limit: int = Query(default=25, ge=1, le=100),
+    domain: str | None = None,
+    risk: str | None = None,
+    sort_by: str = "score",
+    sort_order: str = "desc",
+):
+    suppliers = table("supplier_kpis")
+    suppliers = filter_exact(suppliers, "domain", domain)
+    if risk is not None and "supplier_negative_rate" in suppliers.columns:
+        suppliers = suppliers.rename(columns={"supplier_negative_rate": "risk_score"})
+        suppliers = filter_risk(suppliers, risk)
+        suppliers = suppliers.rename(columns={"risk_score": "supplier_negative_rate"})
+    suppliers = sort_frame(
+        suppliers,
+        sort_by,
+        sort_order,
+        {
+            "score": "supplier_score",
+            "risque": "supplier_negative_rate",
+            "risk": "supplier_negative_rate",
+            "note": "avg_supplier_rating",
+            "rating": "avg_supplier_rating",
+            "avis": "nb_reviews",
+            "reviews": "nb_reviews",
+        },
+        "supplier_score",
+    ).head(limit)
     return records(suppliers)
 
 

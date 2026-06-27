@@ -3,20 +3,51 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.data_access import records, table
+from backend.api.query_filters import filter_exact, filter_risk, sort_frame
 
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
 @router.get("")
-def list_categories(limit: int = Query(default=50, ge=1, le=200)):
-    categories = table("category_kpis").sort_values("category_score", ascending=False).head(limit)
+def list_categories(
+    limit: int = Query(default=50, ge=1, le=200),
+    domain: str | None = None,
+    risk: str | None = None,
+    sort_by: str = "score",
+    sort_order: str = "desc",
+):
+    categories = table("category_kpis")
+    categories = filter_exact(categories, "domain", domain)
+    categories = filter_risk(categories, risk)
+    categories = sort_frame(
+        categories,
+        sort_by,
+        sort_order,
+        {
+            "score": "category_score",
+            "risque": "risk_score",
+            "risk": "risk_score",
+            "note": "avg_rating",
+            "rating": "avg_rating",
+            "avis": "nb_reviews",
+            "reviews": "nb_reviews",
+        },
+        "category_score",
+    ).head(limit)
     return records(categories)
 
 
 @router.get("/performance")
-def category_performance(limit: int = Query(default=50, ge=1, le=200)):
-    categories = table("category_kpis").sort_values(["risk_score", "nb_reviews"], ascending=[False, False]).head(limit)
+def category_performance(
+    limit: int = Query(default=50, ge=1, le=200),
+    domain: str | None = None,
+    risk: str | None = None,
+):
+    categories = table("category_kpis")
+    categories = filter_exact(categories, "domain", domain)
+    categories = filter_risk(categories, risk)
+    categories = categories.sort_values(["risk_score", "nb_reviews"], ascending=[False, False]).head(limit)
     return records(categories)
 
 

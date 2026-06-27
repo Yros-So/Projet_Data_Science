@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.api.data_access import records, table
+from backend.api.query_filters import filter_category, filter_exact, filter_risk, filter_year, sort_frame
 
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -24,12 +25,53 @@ def _resolve_global_product_id(products, product_id: str) -> str:
 
 
 @router.get("")
-def list_products(limit: int = Query(default=25, ge=1, le=200), search: str | None = None):
+def list_products(
+    limit: int = Query(default=25, ge=1, le=200),
+    search: str | None = None,
+    domain: str | None = None,
+    category: str | None = None,
+    category_id: str | None = None,
+    supplier_id: str | None = None,
+    supplier: str | None = None,
+    sentiment: str | None = None,
+    risk: str | None = None,
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    sort_by: str = "popularite",
+    sort_order: str = "desc",
+):
     products = table("products").copy()
     if search:
         mask = products["title"].astype(str).str.contains(search, case=False, na=False)
         products = products[mask]
-    products = products.sort_values(["popularity_score", "avg_rating"], ascending=[False, False]).head(limit)
+    products = filter_exact(products, "domain", domain)
+    products = filter_category(products, category_id or category)
+    products = filter_exact(products, "supplier_id", supplier_id)
+    products = filter_exact(products, "store", supplier)
+    products = filter_exact(products, "dominant_sentiment", sentiment)
+    products = filter_risk(products, risk)
+    products = filter_year(products, year)
+    products = sort_frame(
+        products,
+        sort_by,
+        sort_order,
+        {
+            "popularite": "popularity_score",
+            "popularity": "popularity_score",
+            "note": "avg_rating",
+            "rating": "avg_rating",
+            "confiance": "confidence_score",
+            "confidence": "confidence_score",
+            "achetable": "buyability_score",
+            "buyability": "buyability_score",
+            "futur": "future_purchase_score",
+            "future": "future_purchase_score",
+            "risque": "risk_score",
+            "risk": "risk_score",
+            "avis_negatifs": "negative_rate",
+            "negative": "negative_rate",
+        },
+        "popularity_score",
+    ).head(limit)
     return records(products)
 
 

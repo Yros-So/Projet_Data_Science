@@ -32,6 +32,10 @@ def main() -> None:
     assert categories_response.status_code == 200
     assert categories_response.json(), "Aucune categorie retournee"
 
+    filters_response = client.get("/filters/options")
+    assert filters_response.status_code == 200
+    assert filters_response.json()["domains"], "Aucun domaine retourne"
+
     suppliers_response = client.get("/suppliers?limit=1")
     assert suppliers_response.status_code == 200
     supplier_id = suppliers_response.json()[0]["supplier_id"]

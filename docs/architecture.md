@@ -20,6 +20,9 @@ Silver : avis et produits nettoyes
 Gold : KPIs produits, fournisseurs, categories, recommandations
         |
         v
+PostgreSQL optionnel : tables applicatives indexees
+        |
+        v
 FastAPI
 routes admin / products / suppliers / categories / recommendations / sentiment
         |
@@ -33,6 +36,7 @@ espaces client / fournisseur / administrateur / Data & ML / guide
 - `data/bronze` : fichiers bruts. Structure recommandee : `data/bronze/{categorie}/reviews/` et `data/bronze/{categorie}/metadata/`.
 - `data/silver` : donnees nettoyees.
 - `data/gold` : donnees pretes pour l'API et les espaces applicatifs.
+- `PostgreSQL` : copie optionnelle des tables Gold pour une exposition applicative indexee.
 
 Tables Gold globales :
 

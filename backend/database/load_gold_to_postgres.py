@@ -7,9 +7,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
+load_dotenv(ROOT_DIR / ".env")
 
 from sqlalchemy import create_engine, text
 
