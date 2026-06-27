@@ -23,12 +23,22 @@ def main() -> None:
     products = products_response.json()
     assert products, "Aucun produit retourne"
 
-    product_id = products[0]["parent_asin"]
+    product_id = products[0]["global_product_id"]
     assert client.get(f"/products/{product_id}").status_code == 200
     assert client.get(f"/products/{product_id}/recommendations").status_code == 200
+    assert client.get(f"/recommendations/{product_id}").status_code == 200
+
+    categories_response = client.get("/categories/performance")
+    assert categories_response.status_code == 200
+    assert categories_response.json(), "Aucune categorie retournee"
+
+    suppliers_response = client.get("/suppliers?limit=1")
+    assert suppliers_response.status_code == 200
+    supplier_id = suppliers_response.json()[0]["supplier_id"]
+    assert client.get(f"/suppliers/{supplier_id}/negative-reviews").status_code == 200
 
     sentiment_response = client.post(
-        "/ml/sentiment/predict",
+        "/sentiment/predict",
         json={"text": "Produit de bonne qualite, confortable et elegant."},
     )
     assert sentiment_response.status_code == 200
@@ -39,4 +49,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

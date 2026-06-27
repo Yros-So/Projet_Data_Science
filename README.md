@@ -1,6 +1,6 @@
 # Projet Data Science - Analyse des avis e-commerce
 
-Ce depot contient un MVP complet pour le projet Data Science : analyse des avis clients Amazon_Fashion, detection des produits problematiques, modele de sentiment, recommandations, API FastAPI, interface Next.js, filtres intelligents et guide-bot utilisateur.
+Ce depot contient un MVP complet pour le projet Data Science : analyse multi-categories des avis clients Amazon Reviews 2023, detection des produits problematiques, modele de sentiment, recommandations, API FastAPI, interface Next.js, filtres intelligents, selection de dataset et guide-bot utilisateur.
 
 Le projet suit la logique des fichiers `Projet Data_Science.md` et `Résumé_Data_Science.md` :
 
@@ -23,7 +23,7 @@ Transformer les avis clients en informations utiles pour trois acteurs :
 | Traitement data | Python, pandas, PySpark optionnel |
 | Stockage analytique | Parquet avec fallback CSV |
 | Machine Learning | Scikit-learn, TF-IDF, Logistic Regression |
-| Recommandation | Similarite de contenu + popularite |
+| Recommandation | Similarite de contenu + confiance + popularite |
 | API | FastAPI |
 | Interface | Next.js, React |
 | Base optionnelle | PostgreSQL via Docker |
@@ -32,10 +32,17 @@ Transformer les avis clients en informations utiles pour trois acteurs :
 
 ```text
 backend/
+  etl/config_categories.py        Categories activees progressivement
   etl/etl_spark.py                 Pipeline ETL Bronze/Silver/Gold
   ml/train_sentiment_model.py      Modele de sentiment
   ml/recommendation.py             Recommandations produits
   api/main.py                      API FastAPI
+  api/routes_admin.py              Supervision plateforme
+  api/routes_products.py           Catalogue et detail produit
+  api/routes_suppliers.py          Espace fournisseur
+  api/routes_categories.py         Categories et comparaison
+  api/routes_recommendations.py    Recommandations separees
+  api/routes_sentiment.py          Prediction de sentiment
   database/                        Schema et chargement PostgreSQL optionnel
 
 frontend/
@@ -59,16 +66,31 @@ docs/
 
 ## Donnees
 
-Le projet attend les vrais fichiers Amazon Reviews 2023 ici :
+Le projet lit les categories activees dans `backend/etl/config_categories.py`.
+Par defaut :
 
 ```text
-data/bronze/raw_review_Amazon_Fashion/
-data/bronze/raw_meta_Amazon_Fashion/
+Amazon_Fashion
+All_Beauty
+Appliances
 ```
+
+Le projet attend les vrais fichiers Amazon Reviews 2023 dans la structure progressive :
+
+```text
+data/bronze/Amazon_Fashion/reviews/
+data/bronze/Amazon_Fashion/metadata/
+data/bronze/All_Beauty/reviews/
+data/bronze/All_Beauty/metadata/
+data/bronze/Appliances/reviews/
+data/bronze/Appliances/metadata/
+```
+
+Les anciens chemins `data/bronze/raw_review_Amazon_Fashion/` et `data/bronze/raw_meta_Amazon_Fashion/` restent compatibles pour ne pas casser l'etape deja faite.
 
 Formats acceptes par le MVP : Parquet, CSV, JSON ou JSONL.
 
-Si ces dossiers sont vides, le pipeline genere automatiquement un jeu de donnees de demonstration. Cela permet de tester tout le projet localement sans telecharger plusieurs Go de donnees.
+Si ces dossiers sont vides, le pipeline genere automatiquement un jeu de donnees de demonstration multi-categories. Cela permet de tester tout le projet localement sans telecharger plusieurs Go de donnees.
 
 ## Installation locale
 
@@ -92,11 +114,12 @@ python scripts/run_pipeline.py
 Ce script :
 
 1. lit les donnees Bronze ou genere les donnees demo ;
-2. nettoie les avis et produits ;
-3. cree les fichiers Silver ;
-4. calcule les KPIs Gold ;
-5. genere les recommandations ;
-6. entraine le modele de sentiment.
+2. ajoute `domain`, `global_product_id`, `supplier_id` et `category_id` ;
+3. nettoie les avis et produits ;
+4. cree les fichiers Silver unifies ;
+5. calcule les KPIs Gold produits, fournisseurs et categories ;
+6. genere les recommandations ;
+7. entraine le modele de sentiment.
 
 Fichiers generes :
 
@@ -107,6 +130,7 @@ data/gold/products.parquet
 data/gold/product_kpis.parquet
 data/gold/problematic_products.parquet
 data/gold/supplier_kpis.parquet
+data/gold/category_kpis.parquet
 data/gold/recommendations.parquet
 models/sentiment_model.joblib
 models/metrics/sentiment_metrics.json
@@ -127,14 +151,23 @@ Endpoints principaux :
 
 ```text
 GET  /admin/dashboard
+GET  /admin/problematic-products
+GET  /admin/categories-risk
+GET  /admin/suppliers-risk
 GET  /products
-GET  /products/popular
-GET  /products/problematic
-GET  /products/{product_id}
-GET  /products/{product_id}/recommendations
+GET  /products/{global_product_id}
+GET  /products/{global_product_id}/recommendations
+GET  /recommendations/{global_product_id}
+GET  /categories
+GET  /categories/performance
+GET  /categories/{category_id}/products
 GET  /suppliers
 GET  /suppliers/{supplier_id}/dashboard
-POST /ml/sentiment/predict
+GET  /suppliers/{supplier_id}/products
+GET  /suppliers/{supplier_id}/problematic-products
+GET  /suppliers/{supplier_id}/negative-reviews
+POST /sentiment/predict
+POST /pipeline/run
 ```
 
 ## Etape 3 - Lancer le frontend Next.js
@@ -153,25 +186,43 @@ Interface locale :
 http://127.0.0.1:3000
 ```
 
-Pages disponibles :
+Espaces disponibles :
 
-- Dashboard admin ;
-- Catalogue produits ;
-- Analyse produit et recommandations ;
-- Dashboard fournisseur ;
-- Prediction de sentiment ;
-- Guide intelligent.
+- Administrateur : dashboard global, categories a surveiller, fournisseurs a risque, produits problematiques ;
+- Client : catalogue, detail produit, recommandations, analyse de sentiment ;
+- Fournisseur : dashboard fournisseur, mes produits, avis negatifs, actions recommandees ;
+- Data & ML : pipeline Bronze/Silver/Gold, audit live, modele sentiment, recommandations ;
+- Guide : architecture et logique des relations de donnees.
 
-Le catalogue permet maintenant de differencier clairement les produits :
+La sidebar permet de choisir le dataset actif :
 
 ```text
-Decision : Achetable / A surveiller / A eviter
-Categorie
-Score minimum d'achat
-Tri : meilleur achat, potentiel futur, moins risque, meilleure note, popularite
+Tous les datasets
+Amazon_Fashion
+All_Beauty
+Appliances
 ```
 
-Le score d'achat combine la note moyenne, les avis positifs, les achats verifies, la popularite et le risque. Le guide-bot utilise les memes scores pour expliquer quel produit acheter, eviter ou surveiller.
+Le catalogue permet de differencier clairement les produits :
+
+```text
+Confiance elevee / Confiance moyenne / Produit a surveiller
+Decision : Achetable / A surveiller / A eviter
+Filtres : categorie, fournisseur, sentiment, risque, periode
+Tri : meilleur achat, potentiel futur, plus sur, meilleure note, popularite
+```
+
+Le client ne voit pas les scores techniques bruts. Les KPIs techniques restent reserves a l'administrateur, au fournisseur et a l'espace Data & ML.
+
+La relation suivie par le systeme est :
+
+```text
+Avis client
+  -> analyse de sentiment
+  -> score produit
+  -> score fournisseur / categorie
+  -> dashboards client, fournisseur, administrateur
+```
 
 ## Etape 4 - Test rapide
 

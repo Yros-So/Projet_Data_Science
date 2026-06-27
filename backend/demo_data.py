@@ -6,20 +6,42 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 
-PRODUCTS = [
-    ("AF001", "Sac bandouliere noir elegant", "Fashion", "Urban Mode", 39.9),
-    ("AF002", "Sac a main cuir marron", "Fashion", "Urban Mode", 59.9),
-    ("AF003", "Baskets blanches confort", "Shoes", "Step&Style", 69.9),
-    ("AF004", "Sandales ete femme", "Shoes", "Step&Style", 24.9),
-    ("AF005", "Montre minimaliste doree", "Accessories", "Time Boutique", 45.0),
-    ("AF006", "Ceinture cuir classique", "Accessories", "Classic Wear", 19.9),
-    ("AF007", "Robe fluide imprimee", "Clothing", "Mode Paris", 34.9),
-    ("AF008", "Jean slim bleu", "Clothing", "Denim House", 49.9),
-    ("AF009", "Lunettes de soleil rondes", "Accessories", "Sunny Store", 18.5),
-    ("AF010", "Veste legere mi-saison", "Clothing", "Mode Paris", 74.9),
-    ("AF011", "Portefeuille compact noir", "Accessories", "Classic Wear", 22.0),
-    ("AF012", "Echarpe douce hiver", "Accessories", "Urban Mode", 16.9),
-]
+PRODUCT_CATALOGS = {
+    "Amazon_Fashion": [
+        ("AF001", "Sac bandouliere noir elegant", "Fashion", "Urban Mode", 39.9),
+        ("AF002", "Sac a main cuir marron", "Fashion", "Urban Mode", 59.9),
+        ("AF003", "Baskets blanches confort", "Shoes", "Step&Style", 69.9),
+        ("AF004", "Sandales ete femme", "Shoes", "Step&Style", 24.9),
+        ("AF005", "Montre minimaliste doree", "Accessories", "Time Boutique", 45.0),
+        ("AF006", "Ceinture cuir classique", "Accessories", "Classic Wear", 19.9),
+        ("AF007", "Robe fluide imprimee", "Clothing", "Mode Paris", 34.9),
+        ("AF008", "Jean slim bleu", "Clothing", "Denim House", 49.9),
+        ("AF009", "Lunettes de soleil rondes", "Accessories", "Sunny Store", 18.5),
+        ("AF010", "Veste legere mi-saison", "Clothing", "Mode Paris", 74.9),
+        ("AF011", "Portefeuille compact noir", "Accessories", "Classic Wear", 22.0),
+        ("AF012", "Echarpe douce hiver", "Accessories", "Urban Mode", 16.9),
+    ],
+    "All_Beauty": [
+        ("AB001", "Serum visage hydratant", "Skin Care", "Glow Lab", 21.9),
+        ("AB002", "Creme nuit reparatrice", "Skin Care", "Glow Lab", 27.5),
+        ("AB003", "Palette maquillage naturelle", "Makeup", "Beauty Colors", 18.9),
+        ("AB004", "Mascara volume noir", "Makeup", "Beauty Colors", 12.5),
+        ("AB005", "Shampooing doux cheveux secs", "Hair Care", "Pure Hair", 9.9),
+        ("AB006", "Brosse nettoyante visage", "Beauty Tools", "Care Tools", 32.0),
+        ("AB007", "Huile corps parfumee", "Body Care", "Nature Spa", 15.9),
+        ("AB008", "Kit manucure compact", "Beauty Tools", "Care Tools", 11.9),
+    ],
+    "Appliances": [
+        ("AP001", "Bouilloire electrique rapide", "Kitchen Appliances", "HomeTech", 29.9),
+        ("AP002", "Aspirateur compact sans sac", "Home Appliances", "CleanPro", 89.0),
+        ("AP003", "Grille-pain inox deux fentes", "Kitchen Appliances", "HomeTech", 24.5),
+        ("AP004", "Mini blender smoothie", "Kitchen Appliances", "Mix&Go", 34.9),
+        ("AP005", "Purificateur air silencieux", "Home Appliances", "AirCare", 119.0),
+        ("AP006", "Robot multifonction cuisine", "Kitchen Appliances", "Mix&Go", 149.0),
+        ("AP007", "Fer vapeur leger", "Home Appliances", "CleanPro", 39.9),
+        ("AP008", "Balance cuisine digitale", "Kitchen Appliances", "HomeTech", 13.9),
+    ],
+}
 
 POSITIVE_TEXTS = [
     "Excellent produit, tres bonne qualite et livraison rapide.",
@@ -51,15 +73,20 @@ def _text_for_rating(rating: int) -> str:
     return random.choice(NEGATIVE_TEXTS)
 
 
-def build_demo_data(seed: int = 42, reviews_per_product: int = 18) -> tuple[pd.DataFrame, pd.DataFrame]:
-    random.seed(seed)
+def build_demo_data(
+    seed: int = 42,
+    reviews_per_product: int = 18,
+    domain: str = "Amazon_Fashion",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    random.seed(seed + sum(ord(char) for char in domain))
     products_rows = []
     reviews_rows = []
-    base_date = datetime(2023, 1, 1)
+    base_date = datetime(2020, 1, 1)
+    products = PRODUCT_CATALOGS.get(domain, PRODUCT_CATALOGS["Amazon_Fashion"])
 
-    for index, (asin, title, category, store, price) in enumerate(PRODUCTS, start=1):
+    for index, (asin, title, category, store, price) in enumerate(products, start=1):
         quality_bias = 0.55 + (index % 5) * 0.08
-        if asin in {"AF004", "AF008"}:
+        if asin in {"AF004", "AF008", "AB004", "AP005"}:
             quality_bias = 0.32
 
         ratings = []
@@ -73,7 +100,7 @@ def build_demo_data(seed: int = 42, reviews_per_product: int = 18) -> tuple[pd.D
                 rating = random.choice([1, 2])
             ratings.append(rating)
 
-            timestamp = base_date + timedelta(days=random.randint(0, 520))
+            timestamp = base_date + timedelta(days=random.randint(0, 1460))
             reviews_rows.append(
                 {
                     "rating": rating,
@@ -85,6 +112,7 @@ def build_demo_data(seed: int = 42, reviews_per_product: int = 18) -> tuple[pd.D
                     "timestamp": int(timestamp.timestamp() * 1000),
                     "helpful_vote": random.randint(0, 25),
                     "verified_purchase": random.random() > 0.12,
+                    "domain": domain,
                 }
             )
 
@@ -96,13 +124,13 @@ def build_demo_data(seed: int = 42, reviews_per_product: int = 18) -> tuple[pd.D
                 "average_rating": avg_rating,
                 "rating_number": len(ratings) + random.randint(20, 350),
                 "features": f"{category}, style e-commerce, usage quotidien",
-                "description": f"{title} propose par {store}, article de mode pour demonstration data science.",
+                "description": f"{title} propose par {store}, article {domain} pour demonstration data science.",
                 "price": price,
                 "store": store,
-                "categories": f"Amazon_Fashion>{category}",
+                "categories": f"{domain}>{category}",
                 "parent_asin": asin,
+                "domain": domain,
             }
         )
 
     return pd.DataFrame(reviews_rows), pd.DataFrame(products_rows)
-

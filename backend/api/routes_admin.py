@@ -13,16 +13,7 @@ def admin_dashboard():
     sentiment_stats = table("sentiment_stats")
     product_kpis = table("product_kpis")
     supplier_kpis = table("supplier_kpis")
-    categories = (
-        product_kpis.groupby("main_category")
-        .agg(
-            nb_products=("parent_asin", "nunique"),
-            avg_rating=("avg_rating", "mean"),
-            negative_rate=("negative_rate", "mean"),
-        )
-        .reset_index()
-        .sort_values("negative_rate", ascending=False)
-    )
+    categories = table("category_kpis").sort_values("risk_score", ascending=False)
 
     return {
         "global_kpis": global_kpis(),
@@ -39,20 +30,38 @@ def suppliers_ranking(limit: int = Query(default=10, ge=1, le=100)):
     return records(table("supplier_kpis").sort_values("supplier_score", ascending=False).head(limit))
 
 
+@router.get("/global-kpis")
+def admin_global_kpis():
+    return global_kpis()
+
+
+@router.get("/problematic-products")
+def admin_problematic_products(limit: int = Query(default=25, ge=1, le=100)):
+    return records(table("product_kpis").sort_values("risk_score", ascending=False).head(limit))
+
+
+@router.get("/risky-suppliers")
+def admin_risky_suppliers(limit: int = Query(default=25, ge=1, le=100)):
+    suppliers = table("supplier_kpis")
+    suppliers = suppliers.sort_values(["nb_problematic_products", "supplier_negative_rate"], ascending=[False, False])
+    return records(suppliers.head(limit))
+
+
+@router.get("/suppliers-risk")
+def admin_suppliers_risk(limit: int = Query(default=25, ge=1, le=100)):
+    return admin_risky_suppliers(limit)
+
+
+@router.get("/category-comparison")
+def admin_category_comparison(limit: int = Query(default=50, ge=1, le=200)):
+    return records(table("category_kpis").sort_values("category_score", ascending=False).head(limit))
+
+
+@router.get("/categories-risk")
+def admin_categories_risk(limit: int = Query(default=50, ge=1, le=200)):
+    return records(table("category_kpis").sort_values("risk_score", ascending=False).head(limit))
+
+
 @router.get("/categories/performance")
 def categories_performance():
-    product_kpis = table("product_kpis")
-    categories = (
-        product_kpis.groupby("main_category")
-        .agg(
-            nb_products=("parent_asin", "nunique"),
-            nb_reviews=("nb_reviews", "sum"),
-            avg_rating=("avg_rating", "mean"),
-            negative_rate=("negative_rate", "mean"),
-            risk_score=("risk_score", "mean"),
-        )
-        .reset_index()
-        .sort_values("risk_score", ascending=False)
-    )
-    return records(categories)
-
+    return records(table("category_kpis").sort_values("risk_score", ascending=False))

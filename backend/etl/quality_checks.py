@@ -20,6 +20,8 @@ def _null_rates(df: pd.DataFrame, columns: list[str]) -> dict[str, float]:
 def validate_reviews(reviews: pd.DataFrame) -> dict[str, Any]:
     required = [
         "review_id",
+        "global_product_id",
+        "domain",
         "user_id",
         "parent_asin",
         "rating",
@@ -51,24 +53,29 @@ def validate_reviews(reviews: pd.DataFrame) -> dict[str, Any]:
 
 def validate_products(products: pd.DataFrame) -> dict[str, Any]:
     required = [
+        "global_product_id",
+        "domain",
         "parent_asin",
         "title",
         "main_category",
+        "category_id",
         "supplier_id",
         "store",
         "average_rating",
         "rating_number",
     ]
     missing = _missing_columns(products, required)
-    unique_rate = 0.0 if len(products) == 0 else float(products["parent_asin"].nunique() / len(products))
+    unique_rate = 0.0 if len(products) == 0 else float(products["global_product_id"].nunique() / len(products))
 
     checks = {
         "table": "products_clean",
         "rows": int(len(products)),
         "missing_columns": missing,
         "null_rates": _null_rates(products, required),
-        "duplicate_parent_asin": int(products["parent_asin"].duplicated().sum()) if "parent_asin" in products else None,
-        "parent_asin_unique_rate": round(unique_rate, 4),
+        "duplicate_global_product_id": (
+            int(products["global_product_id"].duplicated().sum()) if "global_product_id" in products else None
+        ),
+        "global_product_id_unique_rate": round(unique_rate, 4),
         "status": "ok",
     }
     if missing or len(products) == 0 or unique_rate < 1.0:

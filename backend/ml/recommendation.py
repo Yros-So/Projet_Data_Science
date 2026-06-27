@@ -15,6 +15,11 @@ def _load_products_and_kpis() -> tuple[pd.DataFrame, pd.DataFrame]:
         run_etl()
         products = read_table(GOLD_PRODUCTS_PATH)
         product_kpis = read_table(GOLD_PRODUCT_KPIS_PATH)
+    required_columns = {"global_product_id", "domain", "confidence_score"}
+    if not required_columns.issubset(products.columns.union(product_kpis.columns)):
+        run_etl()
+        products = read_table(GOLD_PRODUCTS_PATH)
+        product_kpis = read_table(GOLD_PRODUCT_KPIS_PATH)
     return products, product_kpis
 
 
@@ -29,8 +34,17 @@ def build_recommendations(top_n: int = 5) -> pd.DataFrame:
 
     products, product_kpis = _load_products_and_kpis()
     merged = products.merge(
-        product_kpis[["parent_asin", "product_title", "avg_rating", "positive_rate", "popularity_score"]],
-        on="parent_asin",
+        product_kpis[
+            [
+                "global_product_id",
+                "product_title",
+                "avg_rating",
+                "positive_rate",
+                "popularity_score",
+                "confidence_score",
+            ]
+        ],
+        on="global_product_id",
         how="left",
         suffixes=("", "_kpi"),
     )
@@ -50,8 +64,10 @@ def build_recommendations(top_n: int = 5) -> pd.DataFrame:
         recommendations = pd.DataFrame(
             columns=[
                 "product_id",
+                "domain",
                 "product_title",
                 "recommended_product_id",
+                "recommended_domain",
                 "recommended_title",
                 "recommendation_score",
                 "recommendation_type",
@@ -72,20 +88,28 @@ def build_recommendations(top_n: int = 5) -> pd.DataFrame:
                 continue
             same_category_bonus = 0.08 if product["main_category"] == candidate["main_category"] else 0.0
             popularity_score = float(candidate.get("popularity_score") or 0) / float(popularity_max)
-            positive_rate = float(candidate.get("positive_rate") or 0)
-            score = float(similarity[idx, candidate_idx]) * 0.55 + popularity_score * 0.25 + positive_rate * 0.12
+            confidence_score = float(candidate.get("confidence_score") or 0)
+            avg_rating_normalized = float(candidate.get("avg_rating") or 0) / 5
+            score = (
+                float(similarity[idx, candidate_idx]) * 0.4
+                + confidence_score * 0.3
+                + popularity_score * 0.2
+                + avg_rating_normalized * 0.1
+            )
             score += same_category_bonus
             candidate_scores.append((score, candidate))
 
         for score, candidate in sorted(candidate_scores, key=lambda item: item[0], reverse=True)[:top_n]:
             rows.append(
                 {
-                    "product_id": product["parent_asin"],
+                    "product_id": product["global_product_id"],
+                    "domain": product.get("domain"),
                     "product_title": product["title"],
-                    "recommended_product_id": candidate["parent_asin"],
+                    "recommended_product_id": candidate["global_product_id"],
+                    "recommended_domain": candidate.get("domain"),
                     "recommended_title": candidate["title"],
                     "recommendation_score": round(score, 4),
-                    "recommendation_type": "similarite_contenu_popularite",
+                    "recommendation_type": "hybride_contenu_confiance_popularite",
                 }
             )
 
@@ -96,4 +120,3 @@ def build_recommendations(top_n: int = 5) -> pd.DataFrame:
 
 if __name__ == "__main__":
     print(build_recommendations().head())
-

@@ -7,14 +7,14 @@ Ce document relie le projet aux criteres attendus dans le sujet : dataset massif
 | Critere | Reponse du projet |
 | --- | --- |
 | Probleme metier | Analyse de satisfaction e-commerce, detection de produits problematiques et recommandation. |
-| Dataset Big Data | Amazon Reviews 2023, categorie Amazon_Fashion. Le dataset complet Amazon Reviews 2023 contient plusieurs centaines de millions d'avis ; Amazon_Fashion reste volumineux et exploitable localement par echantillonnage ou fichiers Parquet. |
+| Dataset Big Data | Amazon Reviews 2023, base pilote Amazon_Fashion puis multi-categories controle avec All_Beauty et Appliances. Le dataset complet contient plusieurs centaines de millions d'avis ; le projet montre une montee en charge progressive. |
 | Stockage | Architecture Bronze/Silver/Gold en fichiers Parquet ; PostgreSQL optionnel pour les tables finales. |
-| ETL | Pipeline `backend/etl/etl_spark.py` avec nettoyage avis/produits, sentiment, jointure et KPIs. |
+| ETL | Pipeline `backend/etl/etl_spark.py` generique par categorie avec `domain`, `global_product_id`, sentiment, jointure et KPIs. |
 | Qualite donnees | Rapport `data/gold/data_quality_report.json` avec colonnes attendues, null rates, notes valides et unicite produits. |
 | ML supervise | Analyse de sentiment avec baseline, Naive Bayes et Logistic Regression. |
-| Recommandation | Similarite de contenu TF-IDF + popularite + taux positif. |
+| Recommandation | Similarite de contenu TF-IDF + confiance + popularite + score de recommandation. |
 | Evaluation | Metrics JSON, comparaison de modeles et matrice de confusion dans `models/metrics/`. |
-| Interface | Next.js/React avec dashboard admin, catalogue, produit, fournisseur, prediction, filtres intelligents et guide-bot. |
+| Interface | Next.js/React avec espaces separes : client, fournisseur, administrateur, Data & ML et guide. |
 | Reproductibilite | Scripts `scripts/run_pipeline.py`, `scripts/smoke_test.py`, tests `pytest`, `.env.example` et README. |
 
 ## Big Data
@@ -24,16 +24,18 @@ Le projet cible le dataset Amazon Reviews 2023, pas le petit jeu de donnees de d
 Le mode demonstration existe uniquement pour permettre de lancer le projet sans telecharger plusieurs Go de donnees. En soutenance, il faut expliquer clairement :
 
 ```text
-Le pipeline est concu pour Amazon_Fashion.
-Si les fichiers reels sont absents, il genere un dataset demo pour verifier l'application.
-Les donnees massives doivent etre placees dans data/bronze.
+Le pipeline est concu pour plusieurs categories activees progressivement.
+Si les fichiers reels sont absents, il genere un dataset demo multi-categories pour verifier l'application.
+Les donnees massives doivent etre placees dans data/bronze/{categorie}/reviews et data/bronze/{categorie}/metadata.
 ```
 
 Chemins attendus :
 
 ```text
-data/bronze/raw_review_Amazon_Fashion/
-data/bronze/raw_meta_Amazon_Fashion/
+data/bronze/Amazon_Fashion/reviews/
+data/bronze/Amazon_Fashion/metadata/
+data/bronze/All_Beauty/reviews/
+data/bronze/All_Beauty/metadata/
 ```
 
 La version actuelle est volontairement un MVP local. Elle prouve la logique complete, mais ne pretend pas encore traiter les centaines de millions d'avis du dataset complet. L'architecture de passage au vrai Big Data est decrite dans :
@@ -105,6 +107,18 @@ A eviter
 ```
 
 Cette decision repose sur la note moyenne, le taux d'avis positifs, les achats verifies, la popularite et le score de risque. Le frontend ajoute un filtre et un tri intelligent pour comparer rapidement les produits.
+
+Les filtres applicatifs couvrent :
+
+```text
+categorie dataset
+fournisseur
+sentiment
+niveau de risque
+periode 2020-2023
+```
+
+Les scores techniques bruts sont reserves aux vues administrateur, fournisseur et Data & ML. Le client voit surtout une decision lisible et un niveau de confiance.
 
 Un guide-bot est aussi integre. Il aide l'utilisateur a comprendre :
 

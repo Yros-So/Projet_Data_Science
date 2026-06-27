@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT_DIR))
 from sqlalchemy import create_engine, text
 
 from backend.config import (
+    GOLD_CATEGORY_KPIS_PATH,
     GOLD_PRODUCT_KPIS_PATH,
     GOLD_PRODUCTS_PATH,
     GOLD_RECOMMENDATIONS_PATH,
@@ -39,6 +40,7 @@ def load_gold_to_postgres() -> None:
         "products": read_table(GOLD_PRODUCTS_PATH),
         "product_kpis": read_table(GOLD_PRODUCT_KPIS_PATH),
         "supplier_kpis": read_table(GOLD_SUPPLIER_KPIS_PATH),
+        "category_kpis": read_table(GOLD_CATEGORY_KPIS_PATH),
         "recommendations": read_table(GOLD_RECOMMENDATIONS_PATH),
     }
 
@@ -49,4 +51,3 @@ def load_gold_to_postgres() -> None:
 
 if __name__ == "__main__":
     load_gold_to_postgres()
-

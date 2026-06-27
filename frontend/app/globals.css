@@ -45,6 +45,10 @@ button {
   min-height: 100vh;
 }
 
+.shell.collapsed {
+  grid-template-columns: 1fr;
+}
+
 .sidebar {
   position: sticky;
   top: 0;
@@ -53,13 +57,14 @@ button {
   border-right: 1px solid var(--line);
   background: #0f1f2f;
   color: #ecf4f5;
+  overflow-y: auto;
 }
 
 .brand {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 
 .brand-mark {
@@ -84,9 +89,53 @@ button {
   margin-top: 2px;
 }
 
+.dataset-picker {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 22px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.filter-panel {
+  gap: 8px;
+}
+
+.dataset-picker label {
+  color: #aab8c6;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dataset-picker select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  outline: 0;
+  background: #13283a;
+  color: #ffffff;
+}
+
 .nav {
   display: grid;
-  gap: 8px;
+  gap: 14px;
+}
+
+.nav-group {
+  display: grid;
+  gap: 7px;
+}
+
+.nav-group-title {
+  color: #8ea0b2;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .nav-button {
@@ -108,6 +157,12 @@ button {
   border-color: rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
+}
+
+.nav-button.locked,
+.nav-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .main {
@@ -144,6 +199,7 @@ button {
   background: var(--surface);
   color: var(--muted);
   white-space: nowrap;
+  flex-wrap: wrap;
 }
 
 .grid {
@@ -235,6 +291,14 @@ button {
   background: var(--surface);
 }
 
+.wide-field {
+  max-width: 520px;
+}
+
+.flex-field {
+  flex: 1;
+}
+
 .field input,
 .field select {
   width: 100%;
@@ -263,6 +327,17 @@ button {
   border-color: var(--line);
   background: var(--surface);
   color: var(--text);
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .table-wrap {
@@ -427,6 +502,11 @@ tr:last-child td {
   gap: 10px;
 }
 
+.timeline {
+  display: grid;
+  gap: 10px;
+}
+
 .review {
   padding: 12px;
   border: 1px solid var(--line);
@@ -564,7 +644,7 @@ textarea {
   }
 
   .nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .metrics,

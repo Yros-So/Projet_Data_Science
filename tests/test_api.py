@@ -23,9 +23,22 @@ def test_api_core_endpoints():
 
     products = client.get("/products?limit=3")
     assert products.status_code == 200
-    assert len(products.json()) > 0
+    product_payload = products.json()
+    assert len(product_payload) > 0
+    assert "global_product_id" in product_payload[0]
 
-    prediction = client.post("/ml/sentiment/predict", json={"text": "Produit correct et confortable."})
+    categories = client.get("/categories/performance")
+    assert categories.status_code == 200
+    assert len(categories.json()) > 0
+
+    product_id = product_payload[0]["global_product_id"]
+    assert client.get(f"/recommendations/{product_id}").status_code == 200
+
+    suppliers = client.get("/suppliers?limit=1")
+    assert suppliers.status_code == 200
+    supplier_id = suppliers.json()[0]["supplier_id"]
+    assert client.get(f"/suppliers/{supplier_id}/negative-reviews").status_code == 200
+
+    prediction = client.post("/sentiment/predict", json={"text": "Produit correct et confortable."})
     assert prediction.status_code == 200
     assert prediction.json()["sentiment"] in {"positif", "neutre", "negatif"}
-
