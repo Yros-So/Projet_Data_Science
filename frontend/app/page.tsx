@@ -20,12 +20,15 @@ import {
   Target,
   TrendingUp
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import {
+  ApiHealth,
   AdminDashboard,
   apiGet,
+  apiPath,
   apiPost,
   CategoryKpi,
+  FilterOptions,
   Product,
   ProductKpi,
   Recommendation,
@@ -256,6 +259,57 @@ function productMatchesPeriod(product: Product | ProductKpi, period: PeriodFilte
   return min <= year && year <= max;
 }
 
+function sortModeToApi(sortMode: SortMode) {
+  if (sortMode === "future") {
+    return "futur";
+  }
+  if (sortMode === "risk") {
+    return "risque";
+  }
+  if (sortMode === "rating") {
+    return "note";
+  }
+  if (sortMode === "popular") {
+    return "popularite";
+  }
+  return "achetable";
+}
+
+function productQueryParams({
+  datasetFilter,
+  categoryFilter,
+  supplierFilter,
+  sentimentFilter,
+  riskFilter,
+  periodFilter,
+  query,
+  sortMode,
+  limit = 200
+}: {
+  datasetFilter: string;
+  categoryFilter: string;
+  supplierFilter: string;
+  sentimentFilter: SentimentFilter;
+  riskFilter: RiskFilter;
+  periodFilter: PeriodFilter;
+  query: string;
+  sortMode: SortMode;
+  limit?: number;
+}) {
+  return {
+    limit,
+    search: query.trim() || undefined,
+    domain: datasetFilter,
+    category: categoryFilter,
+    supplier: supplierFilter,
+    sentiment: sentimentFilter,
+    risk: riskFilter,
+    year: periodFilter,
+    sort_by: sortModeToApi(sortMode),
+    sort_order: sortMode === "risk" ? "asc" : "desc"
+  };
+}
+
 function Metric({
   icon: Icon,
   label,
@@ -368,6 +422,8 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categoryKpis, setCategoryKpis] = useState<CategoryKpi[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  const [apiHealth, setApiHealth] = useState<ApiHealth | null>(null);
   const [datasetFilter, setDatasetFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [supplierFilter, setSupplierFilter] = useState("all");
@@ -390,16 +446,34 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadCoreData() {
+  const loadCoreData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [dashboardData, productData, supplierData, categoryData] = await Promise.all([
-        apiGet<AdminDashboard>("/admin/dashboard"),
-        apiGet<Product[]>("/products?limit=200"),
-        apiGet<Supplier[]>("/suppliers?limit=100"),
-        apiGet<CategoryKpi[]>("/categories/performance")
+      const [healthData, filterData, dashboardData, productData, supplierData, categoryData] = await Promise.all([
+        apiGet<ApiHealth>("/health"),
+        apiGet<FilterOptions>("/filters/options"),
+        apiGet<AdminDashboard>(apiPath("/admin/dashboard", { domain: datasetFilter, risk: riskFilter })),
+        apiGet<Product[]>(
+          apiPath(
+            "/products",
+            productQueryParams({
+              datasetFilter,
+              categoryFilter,
+              supplierFilter,
+              sentimentFilter,
+              riskFilter,
+              periodFilter,
+              query,
+              sortMode
+            })
+          )
+        ),
+        apiGet<Supplier[]>(apiPath("/suppliers", { limit: 100, domain: datasetFilter, risk: riskFilter })),
+        apiGet<CategoryKpi[]>(apiPath("/categories/performance", { limit: 100, domain: datasetFilter, risk: riskFilter }))
       ]);
+      setApiHealth(healthData);
+      setFilterOptions(filterData);
       setDashboard(dashboardData);
       setProducts(productData);
       setSuppliers(supplierData);
@@ -411,14 +485,24 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [
+    categoryFilter,
+    datasetFilter,
+    periodFilter,
+    query,
+    riskFilter,
+    sentimentFilter,
+    sortMode,
+    supplierFilter
+  ]);
 
   useEffect(() => {
     void loadCoreData();
-  }, []);
+  }, [loadCoreData]);
 
   const domainOptions = useMemo(() => {
     const domains = new Set<string>(defaultDomains);
+    filterOptions?.domains?.forEach((domain) => domains.add(domain));
     dashboard?.global_kpis.domains?.forEach((domain) => domains.add(domain));
     products.forEach((product) => {
       if (product.domain) {
@@ -426,7 +510,7 @@ export default function Home() {
       }
     });
     return Array.from(domains).sort();
-  }, [dashboard, products]);
+  }, [dashboard, filterOptions, products]);
 
   const domainProducts = useMemo(() => {
     if (datasetFilter === "all") {
@@ -436,12 +520,36 @@ export default function Home() {
   }, [products, datasetFilter]);
 
   const categoryOptions = useMemo(() => {
-    return Array.from(new Set(domainProducts.map((product) => product.main_category).filter(Boolean))).sort();
-  }, [domainProducts]);
+    const categories = new Set<string>();
+    if (datasetFilter === "all") {
+      filterOptions?.categories?.forEach((category) => categories.add(category));
+    }
+    categoryKpis
+      .filter((category) => datasetFilter === "all" || category.domain === datasetFilter)
+      .forEach((category) => categories.add(category.main_category));
+    domainProducts.forEach((product) => {
+      if (product.main_category) {
+        categories.add(product.main_category);
+      }
+    });
+    return Array.from(categories).sort();
+  }, [categoryKpis, datasetFilter, domainProducts, filterOptions]);
 
   const supplierOptions = useMemo(() => {
-    return Array.from(new Set(domainProducts.map((product) => product.store).filter(Boolean))).sort();
-  }, [domainProducts]);
+    const supplierNames = new Set<string>();
+    if (datasetFilter === "all") {
+      filterOptions?.suppliers?.forEach((supplier) => supplierNames.add(supplier));
+    }
+    suppliers
+      .filter((supplier) => datasetFilter === "all" || supplier.domain === datasetFilter)
+      .forEach((supplier) => supplierNames.add(supplier.store));
+    domainProducts.forEach((product) => {
+      if (product.store) {
+        supplierNames.add(product.store);
+      }
+    });
+    return Array.from(supplierNames).sort();
+  }, [datasetFilter, domainProducts, filterOptions, suppliers]);
 
   const scopedProducts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -745,10 +853,11 @@ export default function Home() {
             <label htmlFor="period-filter">Periode</label>
             <select id="period-filter" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
               <option value="all">Toutes</option>
-              <option value="2020">2020</option>
-              <option value="2021">2021</option>
-              <option value="2022">2022</option>
-              <option value="2023">2023</option>
+              {(filterOptions?.years.length ? filterOptions.years : [2020, 2021, 2022, 2023]).map((year) => (
+                <option value={year} key={year}>
+                  {year}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -793,6 +902,7 @@ export default function Home() {
             <span className="pill">{datasetFilter === "all" ? "Global" : datasetFilter}</span>
             <CheckCircle2 size={16} />
             API FastAPI
+            <span className="pill">{apiHealth?.data_source?.active ?? "..."}</span>
             <button
               className={isAdminLoggedIn ? "button" : "button secondary"}
               onClick={() => setIsAdminLoggedIn((current) => !current)}
@@ -907,6 +1017,7 @@ export default function Home() {
 
         {!loading && !error && view === "data-ml" ? (
           <DataMlPage
+            apiHealth={apiHealth}
             categories={scopedCategoryKpis}
             kpis={visibleKpis}
             onRunPipeline={runLiveTraining}
@@ -1482,6 +1593,7 @@ function SupplierActionsPage({
 }
 
 function DataMlPage({
+  apiHealth,
   categories,
   kpis,
   onRunPipeline,
@@ -1489,6 +1601,7 @@ function DataMlPage({
   pipelineResult,
   products
 }: {
+  apiHealth: ApiHealth | null;
   categories: CategoryKpi[];
   kpis: {
     total_reviews: number;
@@ -1504,10 +1617,25 @@ function DataMlPage({
 }) {
   return (
     <section className="grid">
-      <div className="grid three">
+      <div className="grid metrics">
         <Metric icon={ShoppingBag} label="Lignes avis traitees" value={number(kpis.total_reviews)} />
         <Metric icon={PackageSearch} label="Produits Gold" value={number(kpis.total_products)} />
         <Metric icon={Target} label="Categories Gold" value={number(kpis.total_categories)} />
+        <Metric icon={CheckCircle2} label="Source API" value={apiHealth?.data_source?.active ?? "auto"} />
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Strategie progressive du dataset</h2>
+          <span className="pill">Architecture defendable</span>
+        </div>
+        <div className="panel-body timeline">
+          <div className="review">Amazon_Fashion : base deja realisee pour prouver le pipeline.</div>
+          <div className="review">Pipeline valide : nettoyage, sentiment, KPIs, recommandations.</div>
+          <div className="review">Multi-categories leger : All_Beauty et Appliances pour verifier le modele commun.</div>
+          <div className="review">Multi-categories etendu : ajout progressif de categories plus volumineuses.</div>
+          <div className="review">Exploitation large : usage massif pour les KPIs, avec ML elargi par echantillons representatifs.</div>
+        </div>
       </div>
 
       <div className="grid two">

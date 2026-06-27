@@ -203,6 +203,17 @@ Interface locale :
 http://127.0.0.1:3000
 ```
 
+Le frontend Next.js consomme directement FastAPI :
+
+```text
+/health              -> statut API et source active files/postgres
+/filters/options     -> listes selectionnables
+/products?...        -> catalogue filtre cote serveur
+/admin/dashboard?... -> supervision filtree
+/suppliers?...       -> espace fournisseur
+/categories?...      -> categories et risques
+```
+
 Espaces disponibles :
 
 - Administrateur : dashboard global, categories a surveiller, fournisseurs a risque, produits problematiques ;
@@ -225,7 +236,7 @@ Le catalogue permet de differencier clairement les produits :
 ```text
 Confiance elevee / Confiance moyenne / Produit a surveiller
 Decision : Achetable / A surveiller / A eviter
-Filtres : categorie, fournisseur, sentiment, risque, periode
+Filtres branches API : dataset, categorie, fournisseur, sentiment, risque, periode
 Tri : meilleur achat, potentiel futur, plus sur, meilleure note, popularite
 ```
 

@@ -83,6 +83,30 @@ Ce document explique :
 - comment passer a Spark, Parquet partitionne, PostgreSQL et modeles plus robustes ;
 - comment ameliorer la prediction des produits futurs achetables.
 
+## Resume final
+
+Le systeme ne doit pas rester limite a `Amazon_Fashion`, mais il ne doit pas non plus charger tout le dataset sans strategie.
+
+La progression retenue est :
+
+```text
+Amazon_Fashion
+        |
+        v
+Pipeline valide
+        |
+        v
+Multi-categories leger
+        |
+        v
+Multi-categories etendu
+        |
+        v
+Exploitation large du dataset
+```
+
+Pour les KPIs, dashboards et statistiques globales, le systeme peut progressivement utiliser une grande partie du dataset. Pour le Machine Learning, il est plus solide de commencer avec un echantillon propre et representatif, puis d'elargir progressivement.
+
 ## Acteurs metier
 
 - Client : choisit les bons produits, lit les avis et recoit des recommandations.

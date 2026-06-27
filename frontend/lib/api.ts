@@ -115,6 +115,27 @@ export type Supplier = {
   supplier_score: number;
 };
 
+export type ApiHealth = {
+  status: string;
+  data_source?: {
+    configured: string;
+    active: string;
+    postgres_ready: boolean;
+  };
+};
+
+export type FilterOptions = {
+  domains: string[];
+  categories: string[];
+  category_ids: string[];
+  suppliers: string[];
+  supplier_ids: string[];
+  sentiments: string[];
+  risk_levels: string[];
+  years: number[];
+  sorts: string[];
+};
+
 export type AdminDashboard = {
   global_kpis: GlobalKpis;
   sentiment_stats: Array<{ sentiment: string; nb_reviews: number; avg_rating: number }>;
@@ -123,6 +144,20 @@ export type AdminDashboard = {
   supplier_ranking: Supplier[];
   categories: CategoryKpi[];
 };
+
+export function apiPath(path: string, params?: Record<string, string | number | null | undefined>): string {
+  if (!params) {
+    return path;
+  }
+  const search = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== null && value !== undefined && value !== "" && value !== "all") {
+      search.set(key, String(value));
+    }
+  });
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}
 
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
