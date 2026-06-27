@@ -12,8 +12,10 @@ METRICS_DIR = MODELS_DIR / "metrics"
 RAW_REVIEWS_DIR = BRONZE_DIR / "raw_review_Amazon_Fashion"
 RAW_PRODUCTS_DIR = BRONZE_DIR / "raw_meta_Amazon_Fashion"
 
-SILVER_REVIEWS_PATH = SILVER_DIR / "reviews_clean.parquet"
-SILVER_PRODUCTS_PATH = SILVER_DIR / "products_clean.parquet"
+SILVER_REVIEWS_DIR = SILVER_DIR / "reviews_clean"
+SILVER_PRODUCTS_DIR = SILVER_DIR / "products_clean"
+SILVER_REVIEWS_PATH = SILVER_REVIEWS_DIR / "data.parquet"
+SILVER_PRODUCTS_PATH = SILVER_PRODUCTS_DIR / "data.parquet"
 
 GOLD_PRODUCTS_PATH = GOLD_DIR / "products.parquet"
 GOLD_REVIEWS_SAMPLE_PATH = GOLD_DIR / "reviews_sample.parquet"
@@ -53,6 +55,8 @@ def ensure_project_dirs() -> None:
     for path in [
         BRONZE_DIR,
         SILVER_DIR,
+        SILVER_REVIEWS_DIR,
+        SILVER_PRODUCTS_DIR,
         GOLD_DIR,
         RAW_REVIEWS_DIR,
         RAW_PRODUCTS_DIR,

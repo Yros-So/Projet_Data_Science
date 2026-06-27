@@ -124,8 +124,8 @@ Ce script :
 Fichiers generes :
 
 ```text
-data/silver/reviews_clean.parquet
-data/silver/products_clean.parquet
+data/silver/reviews_clean/data.parquet
+data/silver/products_clean/data.parquet
 data/gold/products.parquet
 data/gold/product_kpis.parquet
 data/gold/problematic_products.parquet
