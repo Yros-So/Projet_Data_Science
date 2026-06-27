@@ -1,14 +1,24 @@
+from __future__ import annotations
+
 from datasets import load_dataset
 
-category = "Amazon_Fashion"
 
-reviews = load_dataset(
-    "McAuley-Lab/Amazon-Reviews-2023",
-    f"raw_review_{category}",
-    split="full",
-    streaming=True,
-    trust_remote_code=True
-)
+DATASET_NAME = "McAuley-Lab/Amazon-Reviews-2023"
+CATEGORY = "Amazon_Fashion"
 
-for review in reviews.take(3):
-    print(review)
+
+def preview_amazon_fashion(limit: int = 3) -> None:
+    reviews = load_dataset(
+        DATASET_NAME,
+        f"raw_review_{CATEGORY}",
+        split="full",
+        streaming=True,
+        trust_remote_code=True,
+    )
+
+    for review in reviews.take(limit):
+        print(review)
+
+
+if __name__ == "__main__":
+    preview_amazon_fashion()

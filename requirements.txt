@@ -1,15 +1,15 @@
-datasets
-huggingface_hub
 pandas>=2.2
 pyarrow>=16.0
-duckdb
 scikit-learn>=1.5
-tqdm
-streamlit>=1.36
 joblib>=1.4
 fastapi>=0.115
 uvicorn[standard]>=0.30
+streamlit>=1.36
 requests>=2.32
+python-dotenv>=1.0
 sqlalchemy>=2.0
 psycopg2-binary>=2.9
+
+# Optionnel pour executer le vrai pipeline Big Data si Java/PySpark sont disponibles.
 pyspark>=3.5
+

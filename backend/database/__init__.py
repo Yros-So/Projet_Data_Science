@@ -1,0 +1,2 @@
+"""Chargement optionnel vers PostgreSQL."""
+

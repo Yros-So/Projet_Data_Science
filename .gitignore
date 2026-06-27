@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Donnees volumineuses generees ou telechargees localement
+data/bronze/*
+data/silver/*
+data/gold/*
+!data/bronze/.gitkeep
+!data/silver/.gitkeep
+!data/gold/.gitkeep
+
+# Modeles generes localement
+models/*
+!models/.gitkeep
+!models/metrics/
+models/metrics/*
+!models/metrics/.gitkeep
+
+# Environnements et secrets
+.env
+.env.*
+logs/
+
+# Frontend
+frontend/.streamlit/secrets.toml
