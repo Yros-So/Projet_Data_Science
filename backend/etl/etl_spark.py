@@ -8,6 +8,7 @@ import pandas as pd
 
 from backend.config import (
     GOLD_GLOBAL_KPIS_PATH,
+    GOLD_DATA_QUALITY_REPORT_PATH,
     GOLD_PROBLEMATIC_PRODUCTS_PATH,
     GOLD_PRODUCT_KPIS_PATH,
     GOLD_PRODUCTS_PATH,
@@ -21,6 +22,7 @@ from backend.config import (
     ensure_project_dirs,
 )
 from backend.demo_data import build_demo_data
+from backend.etl.quality_checks import build_quality_report
 from backend.storage import write_json, write_table
 
 
@@ -331,6 +333,7 @@ def run_etl() -> dict[str, object]:
     raw_reviews, raw_products, source = load_raw_data()
     reviews = clean_reviews(raw_reviews)
     products = clean_products(raw_products)
+    quality_report = build_quality_report(reviews, products, source)
     gold = build_gold_tables(reviews, products)
     gold["global_kpis"]["data_source"] = source
 
@@ -345,11 +348,13 @@ def run_etl() -> dict[str, object]:
         "sentiment_stats": str(write_table(gold["sentiment_stats"], GOLD_SENTIMENT_STATS_PATH)),
     }
     write_json(gold["global_kpis"], GOLD_GLOBAL_KPIS_PATH)
+    write_json(quality_report, GOLD_DATA_QUALITY_REPORT_PATH)
 
     return {
         "source": source,
         "reviews": len(reviews),
         "products": len(products),
+        "quality_status": quality_report["status"],
         "written_paths": written_paths,
     }
 

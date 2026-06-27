@@ -9,7 +9,7 @@ requests>=2.32
 python-dotenv>=1.0
 sqlalchemy>=2.0
 psycopg2-binary>=2.9
+pytest>=8.2
 
 # Optionnel pour executer le vrai pipeline Big Data si Java/PySpark sont disponibles.
 pyspark>=3.5
-

@@ -198,6 +198,8 @@ Le depot distant configure est :
 https://github.com/Yros-So/Projet_Data_Science.git
 ```
 
+Si un correcteur obtient `Not Found`, le depot est probablement prive. Voir `docs/github_access.md` pour la procedure de mise en public.
+
 Workflow :
 
 ```bash
@@ -218,3 +220,19 @@ git push Projet_Data_Science main
 7. Montrer les recommandations produit.
 8. Expliquer les limites et ameliorations possibles.
 
+## Conformite et evaluation
+
+Documents utiles pour la soutenance :
+
+- `docs/conformite_cahier_des_charges.md` : correspondance avec les criteres du projet ;
+- `docs/architecture.md` : schema technique ;
+- `docs/presentation.md` : plan oral ;
+- `docs/github_access.md` : verification de l'acces public GitHub.
+
+Commandes de verification :
+
+```bash
+python scripts/run_pipeline.py
+pytest
+python scripts/smoke_test.py
+```

@@ -23,6 +23,7 @@ models/metrics/*
 # Environnements et secrets
 .env
 .env.*
+!.env.example
 logs/
 
 # Frontend

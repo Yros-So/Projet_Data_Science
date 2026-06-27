@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from backend.config import SENTIMENT_METRICS_PATH, SENTIMENT_MODEL_PATH, SILVER_REVIEWS_PATH, ensure_project_dirs
+from backend.config import (
+    MODEL_COMPARISON_PATH,
+    SENTIMENT_METRICS_PATH,
+    SENTIMENT_MODEL_PATH,
+    SILVER_REVIEWS_PATH,
+    ensure_project_dirs,
+)
 from backend.etl.etl_spark import run_etl
 from backend.storage import read_table
 
@@ -25,10 +31,19 @@ def train_sentiment_model(model_path: Path = SENTIMENT_MODEL_PATH) -> dict[str, 
 
     try:
         import joblib
+        from sklearn.dummy import DummyClassifier
         from sklearn.feature_extraction.text import TfidfVectorizer
         from sklearn.linear_model import LogisticRegression
-        from sklearn.metrics import classification_report
+        from sklearn.metrics import (
+            accuracy_score,
+            classification_report,
+            confusion_matrix,
+            f1_score,
+            precision_score,
+            recall_score,
+        )
         from sklearn.model_selection import train_test_split
+        from sklearn.naive_bayes import MultinomialNB
         from sklearn.pipeline import Pipeline
     except ImportError as exc:
         raise RuntimeError(
@@ -51,36 +66,77 @@ def train_sentiment_model(model_path: Path = SENTIMENT_MODEL_PATH) -> dict[str, 
         stratify=y if can_stratify else None,
     )
 
-    pipeline = Pipeline(
-        steps=[
-            (
-                "tfidf",
-                TfidfVectorizer(
-                    lowercase=True,
-                    ngram_range=(1, 2),
-                    max_features=5000,
-                    min_df=1,
-                    strip_accents="unicode",
-                ),
-            ),
-            ("classifier", LogisticRegression(max_iter=1000, class_weight="balanced")),
-        ]
-    )
-    pipeline.fit(x_train, y_train)
-    predictions = pipeline.predict(x_test)
+    def make_vectorizer() -> TfidfVectorizer:
+        return TfidfVectorizer(
+            lowercase=True,
+            ngram_range=(1, 2),
+            max_features=5000,
+            min_df=1,
+            strip_accents="unicode",
+        )
+
+    candidates = {
+        "baseline_majority": Pipeline(
+            steps=[
+                ("tfidf", make_vectorizer()),
+                ("classifier", DummyClassifier(strategy="most_frequent")),
+            ]
+        ),
+        "naive_bayes": Pipeline(
+            steps=[
+                ("tfidf", make_vectorizer()),
+                ("classifier", MultinomialNB()),
+            ]
+        ),
+        "logistic_regression": Pipeline(
+            steps=[
+                ("tfidf", make_vectorizer()),
+                ("classifier", LogisticRegression(max_iter=1000, class_weight="balanced")),
+            ]
+        ),
+    }
+
+    comparison = []
+    fitted_models = {}
+    for model_name, pipeline in candidates.items():
+        pipeline.fit(x_train, y_train)
+        fitted_models[model_name] = pipeline
+        predictions = pipeline.predict(x_test)
+        comparison.append(
+            {
+                "model": model_name,
+                "accuracy": float(accuracy_score(y_test, predictions)),
+                "precision_macro": float(precision_score(y_test, predictions, average="macro", zero_division=0)),
+                "recall_macro": float(recall_score(y_test, predictions, average="macro", zero_division=0)),
+                "f1_macro": float(f1_score(y_test, predictions, average="macro", zero_division=0)),
+            }
+        )
+
+    best_result = sorted(comparison, key=lambda item: (item["f1_macro"], item["accuracy"]), reverse=True)[0]
+    best_model_name = best_result["model"]
+    best_model = fitted_models[best_model_name]
+    predictions = best_model.predict(x_test)
 
     report = classification_report(y_test, predictions, output_dict=True, zero_division=0)
+    labels = sorted(y.unique().tolist())
     metrics = {
         "nb_reviews_training": int(len(reviews)),
-        "classes": sorted(y.unique().tolist()),
+        "classes": labels,
+        "best_model": best_model_name,
         "accuracy": float(report.get("accuracy", 0.0)),
+        "confusion_matrix": {
+            "labels": labels,
+            "values": confusion_matrix(y_test, predictions, labels=labels).tolist(),
+        },
+        "model_comparison": comparison,
         "classification_report": report,
     }
 
     model_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(pipeline, model_path)
+    joblib.dump(best_model, model_path)
     SENTIMENT_METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
     SENTIMENT_METRICS_PATH.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+    MODEL_COMPARISON_PATH.write_text(json.dumps(comparison, indent=2, ensure_ascii=False), encoding="utf-8")
     return metrics
 
 
@@ -105,4 +161,3 @@ def predict_sentiment(text: str) -> dict[str, object]:
 
 if __name__ == "__main__":
     print(train_sentiment_model())
-

@@ -12,4 +12,5 @@ uvicorn[standard]>=0.30
 requests>=2.32
 sqlalchemy>=2.0
 psycopg2-binary>=2.9
+pytest>=8.2
 pyspark>=3.5

@@ -23,9 +23,11 @@ GOLD_PROBLEMATIC_PRODUCTS_PATH = GOLD_DIR / "problematic_products.parquet"
 GOLD_SENTIMENT_STATS_PATH = GOLD_DIR / "sentiment_stats.parquet"
 GOLD_RECOMMENDATIONS_PATH = GOLD_DIR / "recommendations.parquet"
 GOLD_GLOBAL_KPIS_PATH = GOLD_DIR / "global_kpis.json"
+GOLD_DATA_QUALITY_REPORT_PATH = GOLD_DIR / "data_quality_report.json"
 
 SENTIMENT_MODEL_PATH = MODELS_DIR / "sentiment_model.joblib"
 SENTIMENT_METRICS_PATH = METRICS_DIR / "sentiment_metrics.json"
+MODEL_COMPARISON_PATH = METRICS_DIR / "model_comparison.json"
 
 
 def ensure_project_dirs() -> None:
@@ -39,4 +41,3 @@ def ensure_project_dirs() -> None:
         METRICS_DIR,
     ]:
         path.mkdir(parents=True, exist_ok=True)
-
