@@ -251,13 +251,30 @@ Demarrer PostgreSQL :
 docker compose up -d postgres
 ```
 
+Le PostgreSQL du projet est expose sur le port local `55432` pour eviter les conflits avec une installation PostgreSQL deja presente sur `5432`.
+
 Charger les tables Gold :
 
 ```bash
 python backend/database/load_gold_to_postgres.py
 ```
 
-La version MVP lit directement les fichiers Gold pour rester simple et rapide. PostgreSQL est prevu pour une version applicative plus complete.
+Tables chargees dans PostgreSQL :
+
+```text
+products
+reviews_sample
+product_kpis
+supplier_kpis
+category_kpis
+problematic_products
+sentiment_stats
+recommendations
+global_dashboard
+data_quality_report
+```
+
+La version MVP lit directement les fichiers Gold pour rester simple et rapide. PostgreSQL est disponible pour valider la couche applicative et les index des tables finales.
 
 ## GitHub
 

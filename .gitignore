@@ -9,6 +9,7 @@ __pycache__/
 data/bronze/*
 data/silver/*
 data/gold/*
+data/postgres_local/
 !data/bronze/.gitkeep
 !data/silver/.gitkeep
 !data/gold/.gitkeep

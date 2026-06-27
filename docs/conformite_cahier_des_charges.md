@@ -75,6 +75,23 @@ docker compose up -d postgres
 python backend/database/load_gold_to_postgres.py
 ```
 
+Le port local utilise par defaut est `55432` afin de ne pas entrer en conflit avec un PostgreSQL systeme deja installe sur `5432`.
+
+Tables chargees :
+
+```text
+products
+reviews_sample
+product_kpis
+supplier_kpis
+category_kpis
+problematic_products
+sentiment_stats
+recommendations
+global_dashboard
+data_quality_report
+```
+
 ## Evaluation Machine Learning
 
 Le script d'entrainement compare maintenant plusieurs modeles :
