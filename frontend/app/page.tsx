@@ -2,16 +2,22 @@
 
 import {
   AlertTriangle,
+  ArrowDownUp,
   BarChart3,
+  Bot,
   Brain,
   CheckCircle2,
+  Lightbulb,
+  MessageCircle,
   PackageSearch,
   RefreshCw,
   Search,
   ShieldCheck,
   ShoppingBag,
+  SlidersHorizontal,
   Star,
   Store,
+  Target,
   TrendingUp
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -25,7 +31,9 @@ import {
   Supplier
 } from "../lib/api";
 
-type View = "admin" | "products" | "product" | "supplier" | "sentiment";
+type View = "admin" | "products" | "product" | "supplier" | "sentiment" | "guide";
+type DecisionFilter = "all" | "Achetable" | "A surveiller" | "A eviter";
+type SortMode = "smart" | "future" | "risk" | "rating" | "popular";
 
 type SupplierDashboard = {
   supplier: Supplier;
@@ -44,7 +52,8 @@ const views: Array<{ id: View; label: string; icon: React.ComponentType<{ size?:
   { id: "products", label: "Catalogue", icon: ShoppingBag },
   { id: "product", label: "Produit", icon: PackageSearch },
   { id: "supplier", label: "Fournisseur", icon: Store },
-  { id: "sentiment", label: "Sentiment", icon: Brain }
+  { id: "sentiment", label: "Sentiment", icon: Brain },
+  { id: "guide", label: "Guide", icon: Bot }
 ];
 
 function pct(value?: number | null) {
@@ -63,6 +72,63 @@ function money(value?: number | null) {
     return "-";
   }
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function buyability(product: Product | ProductKpi) {
+  if (product.buyability_score !== undefined && product.buyability_score !== null) {
+    return product.buyability_score;
+  }
+  const ratingScore = (product.avg_rating ?? 0) / 5;
+  return clampScore(ratingScore * 0.45 + (product.positive_rate ?? 0) * 0.35 + (1 - (product.risk_score ?? 1)) * 0.2);
+}
+
+function futurePotential(product: Product | ProductKpi) {
+  if (product.future_purchase_score !== undefined && product.future_purchase_score !== null) {
+    return product.future_purchase_score;
+  }
+  return clampScore(buyability(product) * 0.7 + Math.min((product.popularity_score ?? 0) / 25, 1) * 0.3);
+}
+
+function decision(product: Product | ProductKpi) {
+  if (product.purchase_decision) {
+    return product.purchase_decision;
+  }
+  const score = buyability(product);
+  if (score >= 0.75 && (product.risk_score ?? 1) < 0.32) {
+    return "Achetable";
+  }
+  if (score >= 0.55 && (product.risk_score ?? 1) < 0.5) {
+    return "A surveiller";
+  }
+  return "A eviter";
+}
+
+function decisionClass(value: string) {
+  if (value === "Achetable") {
+    return "pill good";
+  }
+  if (value === "A eviter") {
+    return "pill danger";
+  }
+  return "pill warn";
+}
+
+function explainProduct(product: Product | ProductKpi) {
+  if (product.purchase_reason) {
+    return product.purchase_reason;
+  }
+  const value = decision(product);
+  if (value === "Achetable") {
+    return "Le produit combine bonne note, avis positifs et risque faible.";
+  }
+  if (value === "A surveiller") {
+    return "Le produit peut etre interessant, mais il faut lire les avis avant achat.";
+  }
+  return "Le produit presente trop de signaux negatifs pour etre recommande.";
 }
 
 function Metric({
@@ -130,6 +196,8 @@ function ProductRows({ products, onSelect }: { products: Product[]; onSelect: (i
             <th>Prix</th>
             <th>Note</th>
             <th>Positif</th>
+            <th>Decision</th>
+            <th>Potentiel futur</th>
             <th>Risque</th>
             <th></th>
           </tr>
@@ -148,6 +216,11 @@ function ProductRows({ products, onSelect }: { products: Product[]; onSelect: (i
               <td>
                 <span className="pill good">{pct(product.positive_rate)}</span>
               </td>
+              <td>
+                <span className={decisionClass(decision(product))}>{decision(product)}</span>
+                <div className="muted">{explainProduct(product)}</div>
+              </td>
+              <td>{pct(futurePotential(product))}</td>
               <td>
                 <span className={(product.risk_score ?? 0) > 0.35 ? "pill warn" : "pill"}>
                   {number(product.risk_score, 2)}
@@ -178,6 +251,10 @@ export default function Home() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [supplierDashboard, setSupplierDashboard] = useState<SupplierDashboard | null>(null);
   const [query, setQuery] = useState("");
+  const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sortMode, setSortMode] = useState<SortMode>("smart");
+  const [minimumScore, setMinimumScore] = useState(0);
   const [reviewText, setReviewText] = useState("Produit de mauvaise qualite, taille trop petite.");
   const [sentiment, setSentiment] = useState<SentimentResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -244,13 +321,51 @@ export default function Home() {
 
   const filteredProducts = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return products;
-    }
-    return products.filter((product) =>
-      `${product.title} ${product.store} ${product.main_category}`.toLowerCase().includes(normalized)
+    const filtered = products.filter((product) => {
+      const matchesSearch =
+        !normalized || `${product.title} ${product.store} ${product.main_category}`.toLowerCase().includes(normalized);
+      const matchesDecision = decisionFilter === "all" || decision(product) === decisionFilter;
+      const matchesCategory = categoryFilter === "all" || product.main_category === categoryFilter;
+      const matchesScore = buyability(product) >= minimumScore / 100;
+      return matchesSearch && matchesDecision && matchesCategory && matchesScore;
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (sortMode === "future") {
+        return futurePotential(b) - futurePotential(a);
+      }
+      if (sortMode === "risk") {
+        return (a.risk_score ?? 0) - (b.risk_score ?? 0);
+      }
+      if (sortMode === "rating") {
+        return (b.avg_rating ?? 0) - (a.avg_rating ?? 0);
+      }
+      if (sortMode === "popular") {
+        return (b.popularity_score ?? 0) - (a.popularity_score ?? 0);
+      }
+      return buyability(b) - buyability(a);
+    });
+  }, [products, query, decisionFilter, categoryFilter, sortMode, minimumScore]);
+
+  const categories = useMemo(() => {
+    return Array.from(new Set(products.map((product) => product.main_category).filter(Boolean))).sort();
+  }, [products]);
+
+  const productSummary = useMemo(() => {
+    const values = products.reduce(
+      (acc, product) => {
+        const productDecision = decision(product);
+        acc[productDecision] = (acc[productDecision] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
     );
-  }, [products, query]);
+    return {
+      achetable: values.Achetable ?? 0,
+      watch: values["A surveiller"] ?? 0,
+      avoid: values["A eviter"] ?? 0
+    };
+  }, [products]);
 
   async function predictSentiment() {
     setSentiment(null);
@@ -268,7 +383,8 @@ export default function Home() {
     products: "Catalogue produits",
     product: "Analyse produit",
     supplier: "Dashboard fournisseur",
-    sentiment: "Prediction de sentiment"
+    sentiment: "Prediction de sentiment",
+    guide: "Guide intelligent"
   }[view];
 
   return (
@@ -385,10 +501,64 @@ export default function Home() {
 
         {!loading && !error && view === "products" ? (
           <section className="grid">
+            <div className="grid three">
+              <Metric icon={CheckCircle2} label="Achetables" value={number(productSummary.achetable)} sub="Bon choix" />
+              <Metric icon={AlertTriangle} label="A surveiller" value={number(productSummary.watch)} sub="Lire les avis" />
+              <Metric icon={ShieldCheck} label="A eviter" value={number(productSummary.avoid)} sub="Risque trop haut" />
+            </div>
+
             <div className="toolbar">
               <div className="field" style={{ flex: 1 }}>
                 <Search size={18} />
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rechercher" />
+              </div>
+              <div className="field">
+                <SlidersHorizontal size={18} />
+                <select value={decisionFilter} onChange={(event) => setDecisionFilter(event.target.value as DecisionFilter)}>
+                  <option value="all">Tous les produits</option>
+                  <option value="Achetable">Achetable</option>
+                  <option value="A surveiller">A surveiller</option>
+                  <option value="A eviter">A eviter</option>
+                </select>
+              </div>
+              <div className="field">
+                <Target size={18} />
+                <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+                  <option value="all">Toutes categories</option>
+                  {categories.map((category) => (
+                    <option value={category} key={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <ArrowDownUp size={18} />
+                <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+                  <option value="smart">Meilleur achat</option>
+                  <option value="future">Potentiel futur</option>
+                  <option value="risk">Moins risque</option>
+                  <option value="rating">Meilleure note</option>
+                  <option value="popular">Plus populaire</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-body score-filter">
+                <div>
+                  <strong>Score minimum d'achat</strong>
+                  <div className="muted">0% affiche tout, 70% garde seulement les produits faciles a recommander.</div>
+                </div>
+                <input
+                  aria-label="Score minimum d'achat"
+                  max="100"
+                  min="0"
+                  onChange={(event) => setMinimumScore(Number(event.target.value))}
+                  type="range"
+                  value={minimumScore}
+                />
+                <span className="pill">{minimumScore}%</span>
               </div>
             </div>
 
@@ -406,10 +576,16 @@ export default function Home() {
                   <div className="grid three">
                     <span className="pill">{number(product.avg_rating, 2)} / 5</span>
                     <span className="pill good">{pct(product.positive_rate)}</span>
-                    <span className={(product.risk_score ?? 0) > 0.35 ? "pill warn" : "pill"}>
-                      {number(product.risk_score, 2)}
-                    </span>
+                    <span className={decisionClass(decision(product))}>{decision(product)}</span>
                   </div>
+                  <div className="smart-score">
+                    <span>Score achat</span>
+                    <div className="bar-track">
+                      <div className="bar-fill" style={{ width: `${Math.round(buyability(product) * 100)}%` }} />
+                    </div>
+                    <strong>{pct(buyability(product))}</strong>
+                  </div>
+                  <div className="muted">{explainProduct(product)}</div>
                   <button className="button" onClick={() => selectProduct(product.parent_asin)} type="button">
                     <PackageSearch size={16} />
                     Analyser
@@ -483,6 +659,15 @@ export default function Home() {
               </div>
             </div>
           </section>
+        ) : null}
+
+        {!loading && !error && view === "guide" ? (
+          <GuideBot
+            dashboard={dashboard}
+            products={products}
+            selectedProduct={productDetail}
+            onSelectProduct={selectProduct}
+          />
         ) : null}
       </main>
     </div>
@@ -711,3 +896,183 @@ function SupplierView({
   );
 }
 
+function GuideBot({
+  dashboard,
+  products,
+  selectedProduct,
+  onSelectProduct
+}: {
+  dashboard: AdminDashboard | null;
+  products: Product[];
+  selectedProduct: Product | null;
+  onSelectProduct: (id: string) => void;
+}) {
+  const quickQuestions = [
+    "Quel produit acheter ?",
+    "Quel produit eviter ?",
+    "Quel produit peut marcher dans le futur ?",
+    "Comment lire les scores ?",
+    "Quel fournisseur est fiable ?"
+  ];
+  const [question, setQuestion] = useState(quickQuestions[0]);
+  const [answer, setAnswer] = useState(() => buildBotAnswer(quickQuestions[0], products, dashboard, selectedProduct));
+
+  function askBot(nextQuestion = question) {
+    setQuestion(nextQuestion);
+    setAnswer(buildBotAnswer(nextQuestion, products, dashboard, selectedProduct));
+  }
+
+  return (
+    <section className="guide-layout">
+      <div className="panel">
+        <div className="panel-header">
+          <h2>
+            <Bot size={18} /> Assistant intelligent
+          </h2>
+          <span className="pill">Guide utilisateur</span>
+        </div>
+        <div className="panel-body guide-chat">
+          <div className="bot-message user">
+            <MessageCircle size={18} />
+            <span>{answer.question}</span>
+          </div>
+          <div className="bot-message bot">
+            <Lightbulb size={18} />
+            <div>
+              <strong>{answer.title}</strong>
+              <p>{answer.text}</p>
+            </div>
+          </div>
+
+          {answer.products.length ? (
+            <div className="guide-products">
+              {answer.products.map((product) => (
+                <button className="guide-product" key={product.parent_asin} onClick={() => onSelectProduct(product.parent_asin)}>
+                  <span className={decisionClass(decision(product))}>{decision(product)}</span>
+                  <strong>{product.title}</strong>
+                  <span className="muted">
+                    Achat {pct(buyability(product))} - Futur {pct(futurePotential(product))} - Risque{" "}
+                    {number(product.risk_score, 2)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="guide-input">
+            <input
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Pose une question : quel produit acheter, eviter, comparer..."
+            />
+            <button className="button" onClick={() => askBot()} type="button">
+              <Bot size={16} />
+              Demander
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Questions rapides</h2>
+        </div>
+        <div className="panel-body quick-questions">
+          {quickQuestions.map((item) => (
+            <button className="button secondary" key={item} onClick={() => askBot(item)} type="button">
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel guide-rules">
+        <div className="panel-header">
+          <h2>Logique simple</h2>
+        </div>
+        <div className="panel-body">
+          <div className="rule">
+            <span className="pill good">Achetable</span>
+            <p>Bonne note, beaucoup d'avis positifs, faible risque. C'est le choix le plus facile a recommander.</p>
+          </div>
+          <div className="rule">
+            <span className="pill warn">A surveiller</span>
+            <p>Le produit est interessant, mais il faut verifier les avis et comparer avec un produit similaire.</p>
+          </div>
+          <div className="rule">
+            <span className="pill danger">A eviter</span>
+            <p>Les avis negatifs ou le risque sont trop eleves. Le systeme conseille de chercher une alternative.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function buildBotAnswer(
+  rawQuestion: string,
+  products: Product[],
+  dashboard: AdminDashboard | null,
+  selectedProduct: Product | null
+) {
+  const normalized = rawQuestion.toLowerCase();
+  const rankedByBuy = [...products].sort((a, b) => buyability(b) - buyability(a));
+  const rankedByFuture = [...products].sort((a, b) => futurePotential(b) - futurePotential(a));
+  const rankedByRisk = [...products].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0));
+  const best = rankedByBuy[0];
+  const risky = rankedByRisk[0];
+  const future = rankedByFuture[0];
+  const supplier = dashboard?.supplier_ranking?.[0];
+
+  if (normalized.includes("futur") || normalized.includes("avenir") || normalized.includes("marcher")) {
+    return {
+      question: rawQuestion,
+      title: "Prediction d'achat futur",
+      text: future
+        ? `${future.title} a le meilleur potentiel futur : score futur ${pct(futurePotential(future))}. Le systeme regarde la popularite, les avis positifs et le risque.`
+        : "Je n'ai pas encore assez de donnees produit.",
+      products: future ? rankedByFuture.slice(0, 3) : []
+    };
+  }
+
+  if (normalized.includes("eviter") || normalized.includes("risque") || normalized.includes("mauvais")) {
+    return {
+      question: rawQuestion,
+      title: "Produit a eviter ou surveiller",
+      text: risky
+        ? `${risky.title} ressort comme produit le plus risque. Raison : ${explainProduct(risky)}`
+        : "Je n'ai pas encore assez de donnees produit.",
+      products: risky ? rankedByRisk.slice(0, 3) : []
+    };
+  }
+
+  if (normalized.includes("score") || normalized.includes("comprendre") || normalized.includes("difference")) {
+    return {
+      question: rawQuestion,
+      title: "Comment le systeme decide",
+      text:
+        "Le score d'achat combine la note moyenne, le taux d'avis positifs, les achats verifies, la popularite et le risque. Plus le score est haut, plus le produit est simple a recommander. Le potentiel futur ajoute l'effet popularite pour predire les produits qui peuvent continuer a etre achetes.",
+      products: selectedProduct ? [selectedProduct] : rankedByBuy.slice(0, 2)
+    };
+  }
+
+  if (normalized.includes("fournisseur") || normalized.includes("vendeur") || normalized.includes("store")) {
+    return {
+      question: rawQuestion,
+      title: "Fournisseur le plus fiable",
+      text: supplier
+        ? `${supplier.store} est le fournisseur le mieux classe actuellement. Il combine note moyenne, volume d'avis et faible taux negatif.`
+        : "Je n'ai pas encore assez de donnees fournisseur.",
+      products: rankedByBuy.filter((product) => product.store === supplier?.store).slice(0, 3)
+    };
+  }
+
+  return {
+    question: rawQuestion,
+    title: "Meilleur choix conseille",
+    text: best
+      ? `${best.title} est le meilleur choix actuel. Decision : ${decision(best)}. ${explainProduct(best)}`
+      : "Je n'ai pas encore assez de donnees produit.",
+    products: best ? rankedByBuy.slice(0, 3) : []
+  };
+}

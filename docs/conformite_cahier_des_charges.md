@@ -14,7 +14,7 @@ Ce document relie le projet aux criteres attendus dans le sujet : dataset massif
 | ML supervise | Analyse de sentiment avec baseline, Naive Bayes et Logistic Regression. |
 | Recommandation | Similarite de contenu TF-IDF + popularite + taux positif. |
 | Evaluation | Metrics JSON, comparaison de modeles et matrice de confusion dans `models/metrics/`. |
-| Interface | Next.js/React avec dashboard admin, catalogue, produit, fournisseur et prediction. |
+| Interface | Next.js/React avec dashboard admin, catalogue, produit, fournisseur, prediction, filtres intelligents et guide-bot. |
 | Reproductibilite | Scripts `scripts/run_pipeline.py`, `scripts/smoke_test.py`, tests `pytest`, `.env.example` et README. |
 
 ## Big Data
@@ -84,6 +84,28 @@ Le meilleur modele est choisi par `f1_macro`, puis sauvegarde dans :
 
 ```text
 models/sentiment_model.joblib
+```
+
+## Decision produit et aide utilisateur
+
+Le systeme produit une decision lisible pour chaque produit :
+
+```text
+Achetable
+A surveiller
+A eviter
+```
+
+Cette decision repose sur la note moyenne, le taux d'avis positifs, les achats verifies, la popularite et le score de risque. Le frontend ajoute un filtre et un tri intelligent pour comparer rapidement les produits.
+
+Un guide-bot est aussi integre. Il aide l'utilisateur a comprendre :
+
+```text
+Quel produit acheter ?
+Quel produit eviter ?
+Quel produit peut marcher dans le futur ?
+Comment lire les scores ?
+Quel fournisseur est fiable ?
 ```
 
 ## Tests

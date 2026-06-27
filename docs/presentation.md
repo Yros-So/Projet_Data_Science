@@ -25,6 +25,8 @@ Comment exploiter les avis clients et les metadonnees produits pour analyser la 
 - Dashboard global.
 - Produits populaires.
 - Produits problematiques.
+- Filtres intelligents : achetable, a surveiller, a eviter.
+- Guide-bot qui explique la logique du systeme.
 - Dashboard fournisseur.
 - Prediction de sentiment.
 - Recommandations produit.
@@ -35,4 +37,3 @@ Comment exploiter les avis clients et les metadonnees produits pour analyser la 
 - Le MVP utilise un fallback demo si les vrais fichiers ne sont pas installes.
 - Le modele TF-IDF + Logistic Regression est simple mais explicable.
 - PostgreSQL est optionnel dans ce MVP ; les fichiers Gold alimentent directement l'API.
-

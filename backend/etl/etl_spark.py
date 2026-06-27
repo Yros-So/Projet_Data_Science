@@ -246,6 +246,38 @@ def build_gold_tables(reviews: pd.DataFrame, products: pd.DataFrame) -> dict[str
         + product_kpis["low_rating_rate"] * 0.3
         + (1 - product_kpis["verified_rate"]) * 0.1
     )
+    max_popularity = float(product_kpis["popularity_score"].max() or 1)
+    product_kpis["popularity_norm"] = product_kpis["popularity_score"] / max_popularity
+    product_kpis["buyability_score"] = (
+        (product_kpis["avg_rating"] / 5) * 0.35
+        + product_kpis["positive_rate"] * 0.3
+        + product_kpis["verified_rate"] * 0.15
+        + product_kpis["popularity_norm"] * 0.1
+        + (1 - product_kpis["risk_score"]).clip(lower=0, upper=1) * 0.1
+    ).clip(lower=0, upper=1)
+    product_kpis["future_purchase_score"] = (
+        product_kpis["buyability_score"] * 0.6
+        + product_kpis["popularity_norm"] * 0.25
+        + product_kpis["positive_rate"] * 0.15
+        - product_kpis["risk_score"] * 0.1
+    ).clip(lower=0, upper=1)
+
+    def purchase_decision(row: pd.Series) -> str:
+        if row["buyability_score"] >= 0.75 and row["risk_score"] < 0.32:
+            return "Achetable"
+        if row["buyability_score"] >= 0.55 and row["risk_score"] < 0.5:
+            return "A surveiller"
+        return "A eviter"
+
+    def purchase_reason(row: pd.Series) -> str:
+        if row["purchase_decision"] == "Achetable":
+            return "Bonne note, avis majoritairement positifs et risque faible."
+        if row["purchase_decision"] == "A surveiller":
+            return "Produit interessant mais certains signaux demandent verification."
+        return "Risque trop eleve ou avis negatifs trop presents."
+
+    product_kpis["purchase_decision"] = product_kpis.apply(purchase_decision, axis=1)
+    product_kpis["purchase_reason"] = product_kpis.apply(purchase_reason, axis=1)
     product_kpis = product_kpis.sort_values(["risk_score", "nb_reviews"], ascending=[False, False])
 
     problematic_products = product_kpis[product_kpis["nb_reviews"] >= 3].head(25).copy()
@@ -295,6 +327,10 @@ def build_gold_tables(reviews: pd.DataFrame, products: pd.DataFrame) -> dict[str
                 "negative_rate",
                 "popularity_score",
                 "risk_score",
+                "buyability_score",
+                "future_purchase_score",
+                "purchase_decision",
+                "purchase_reason",
             ]
         ],
         on="parent_asin",

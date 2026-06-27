@@ -22,6 +22,10 @@ export type Product = {
   negative_rate?: number;
   risk_score?: number;
   popularity_score?: number;
+  buyability_score?: number;
+  future_purchase_score?: number;
+  purchase_decision?: string;
+  purchase_reason?: string;
   description?: string;
   recent_reviews?: Review[];
 };
@@ -37,6 +41,10 @@ export type ProductKpi = {
   negative_rate: number;
   popularity_score: number;
   risk_score: number;
+  buyability_score?: number;
+  future_purchase_score?: number;
+  purchase_decision?: string;
+  purchase_reason?: string;
 };
 
 export type Review = {
@@ -93,4 +101,3 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
-

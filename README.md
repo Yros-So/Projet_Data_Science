@@ -1,6 +1,6 @@
 # Projet Data Science - Analyse des avis e-commerce
 
-Ce depot contient un MVP complet pour le projet Data Science : analyse des avis clients Amazon_Fashion, detection des produits problematiques, modele de sentiment, recommandations, API FastAPI et interface Next.js.
+Ce depot contient un MVP complet pour le projet Data Science : analyse des avis clients Amazon_Fashion, detection des produits problematiques, modele de sentiment, recommandations, API FastAPI, interface Next.js, filtres intelligents et guide-bot utilisateur.
 
 Le projet suit la logique des fichiers `Projet Data_Science.md` et `Résumé_Data_Science.md` :
 
@@ -159,7 +159,19 @@ Pages disponibles :
 - Catalogue produits ;
 - Analyse produit et recommandations ;
 - Dashboard fournisseur ;
-- Prediction de sentiment.
+- Prediction de sentiment ;
+- Guide intelligent.
+
+Le catalogue permet maintenant de differencier clairement les produits :
+
+```text
+Decision : Achetable / A surveiller / A eviter
+Categorie
+Score minimum d'achat
+Tri : meilleur achat, potentiel futur, moins risque, meilleure note, popularite
+```
+
+Le score d'achat combine la note moyenne, les avis positifs, les achats verifies, la popularite et le risque. Le guide-bot utilise les memes scores pour expliquer quel produit acheter, eviter ou surveiller.
 
 ## Etape 4 - Test rapide
 

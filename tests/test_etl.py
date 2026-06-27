@@ -21,9 +21,17 @@ def test_etl_generates_gold_tables_and_quality_report():
 
     product_kpis = read_table(GOLD_PRODUCT_KPIS_PATH)
     assert not product_kpis.empty
-    assert {"parent_asin", "nb_reviews", "avg_rating", "risk_score"}.issubset(product_kpis.columns)
+    assert {
+        "parent_asin",
+        "nb_reviews",
+        "avg_rating",
+        "risk_score",
+        "buyability_score",
+        "future_purchase_score",
+        "purchase_decision",
+    }.issubset(product_kpis.columns)
+    assert set(product_kpis["purchase_decision"].unique()).issubset({"Achetable", "A surveiller", "A eviter"})
 
     report = read_json(GOLD_DATA_QUALITY_REPORT_PATH)
     assert report["status"] == "ok"
     assert len(report["checks"]) == 2
-

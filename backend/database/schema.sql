@@ -24,7 +24,11 @@ CREATE TABLE IF NOT EXISTS product_kpis (
     neutral_rate DOUBLE PRECISION,
     negative_rate DOUBLE PRECISION,
     popularity_score DOUBLE PRECISION,
-    risk_score DOUBLE PRECISION
+    risk_score DOUBLE PRECISION,
+    buyability_score DOUBLE PRECISION,
+    future_purchase_score DOUBLE PRECISION,
+    purchase_decision TEXT,
+    purchase_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS supplier_kpis (
@@ -52,5 +56,6 @@ CREATE TABLE IF NOT EXISTS recommendations (
 
 CREATE INDEX IF NOT EXISTS idx_product_kpis_risk ON product_kpis (risk_score DESC);
 CREATE INDEX IF NOT EXISTS idx_product_kpis_popularity ON product_kpis (popularity_score DESC);
+CREATE INDEX IF NOT EXISTS idx_product_kpis_buyability ON product_kpis (buyability_score DESC);
+CREATE INDEX IF NOT EXISTS idx_product_kpis_future ON product_kpis (future_purchase_score DESC);
 CREATE INDEX IF NOT EXISTS idx_recommendations_product ON recommendations (product_id);
-
