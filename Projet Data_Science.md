@@ -1,4 +1,4 @@
-
+﻿
 # Projet Data Science — Analyse des avis clients et recommandation e-commerce
 
 ## 1. But du projet
@@ -34,7 +34,7 @@ Les objectifs principaux du projet sont les suivants :
 - Recommander des produits similaires ou populaires.
 - Construire un pipeline ETL pour nettoyer et transformer les données.
 - Utiliser PySpark pour traiter efficacement un grand volume de données.
-- Créer une interface de démonstration avec Streamlit.
+- Créer une interface web de démonstration avec Next.js / React.
 - Produire un rendu final clair : README, code GitHub, notebook, pipeline et démonstration.
 
 ---
@@ -181,7 +181,7 @@ Solution retenue :
 
 - utiliser Spark uniquement pour l’ETL ;
 - sauvegarder les résultats finaux dans des fichiers Parquet ;
-- faire lire à Streamlit uniquement les données préparées.
+- faire lire au frontend Next.js uniquement les données préparées.
 
 ---
 
@@ -208,7 +208,7 @@ Analyse exploratoire + Machine Learning
 Backend applicatif
         |
         v
-Interface Streamlit
+Interface Next.js
 ````
 
 ---
@@ -283,7 +283,7 @@ Son rôle est de :
 * calculer les indicateurs par produit ;
 * générer les fichiers finaux utilisés par l’application.
 
-PySpark n’est pas utilisé directement dans l’interface Streamlit. Il sert à préparer les données en amont.
+PySpark n’est pas utilisé directement dans l’interface Next.js. Il sert à préparer les données en amont.
 
 Cela permet de séparer le traitement massif des données et l’affichage interactif.
 
@@ -353,7 +353,7 @@ Bases possibles :
 
 ## 12. Frontend
 
-Le frontend est réalisé avec Streamlit.
+Le frontend est réalisé avec Next.js / React.
 
 Il permet de créer une interface simple pour présenter les résultats du projet.
 
@@ -471,7 +471,7 @@ Le rendu final du projet comprend :
 * les scripts ETL avec PySpark ;
 * les notebooks d’analyse exploratoire ;
 * les modèles Machine Learning entraînés ;
-* une interface Streamlit fonctionnelle ;
+* une interface Next.js fonctionnelle ;
 * une démonstration finale du projet.
 
 La démonstration doit montrer :
@@ -566,7 +566,7 @@ Le frontend permet de visualiser les résultats, d’interagir avec le modèle e
                      |                                      |
                      v                                      v
              +-----------------------------------------------+
-             | Interface Streamlit                           |
+             | Interface Next.js                           |
              | Dashboard / prédiction / recommandation       |
              +-----------------------------------------------+
 ```
@@ -583,7 +583,7 @@ Le frontend permet de visualiser les résultats, d’interagir avec le modèle e
 | Analyse             | Pandas, DuckDB, Matplotlib | EDA et visualisations                  |
 | Machine Learning    | Scikit-learn               | Modèle de sentiment et recommandation  |
 | Base de données     | MongoDB ou PostgreSQL      | Stockage applicatif optionnel          |
-| Interface           | Streamlit                  | Dashboard et démonstration             |
+| Interface           | Next.js / React            | Dashboard et démonstration             |
 | Versioning          | Git / GitHub               | Gestion du code source                 |
 
 ---
@@ -653,7 +653,7 @@ Le pipeline complet suit les étapes suivantes :
 8. Préparation des données pour le Machine Learning
 9. Entraînement du modèle de sentiment
 10. Génération des recommandations
-11. Affichage dans Streamlit
+11. Affichage dans Next.js
 ```
 
 ---
@@ -674,7 +674,9 @@ pandas
 pyarrow
 duckdb
 scikit-learn
-streamlit
+next
+react
+react-dom
 matplotlib
 joblib
 tqdm
@@ -719,14 +721,16 @@ Ce script génère une liste de produits recommandés à partir des notes, des d
 ### 21.5 Lancement de l’interface
 
 ```bash
-streamlit run frontend/app.py
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
 
 ## 22. Fonctionnalités de l’interface
 
-L’interface Streamlit contient plusieurs pages.
+L’interface Next.js contient plusieurs pages.
 
 ### 22.1 Page Dashboard
 
@@ -878,7 +882,7 @@ Pour améliorer les performances, les données sont stockées en Parquet et sép
 
 ### 26.4 Interface utilisateur
 
-Streamlit ne doit pas lancer les traitements lourds directement.
+Le frontend Next.js ne doit pas lancer les traitements lourds directement.
 
 L’interface lit uniquement les fichiers déjà préparés dans la couche Gold.
 
@@ -923,7 +927,7 @@ Plusieurs améliorations peuvent être ajoutées dans une version future :
 | Semaine 4 | Analyse exploratoire des données                                                 |
 | Semaine 5 | Entraînement du modèle de sentiment                                              |
 | Semaine 6 | Mise en place de la recommandation                                               |
-| Semaine 7 | Création de l’interface Streamlit                                                |
+| Semaine 7 | Création de l’interface Next.js                                                |
 | Semaine 8 | Finalisation du README, nettoyage du dépôt Git et préparation de la présentation |
 
 ---
@@ -938,7 +942,7 @@ Le rendu final du projet sera composé de :
 3. Des scripts Python pour l’ETL
 4. Des notebooks pour l’analyse exploratoire
 5. Un modèle de Machine Learning entraîné
-6. Une interface Streamlit fonctionnelle
+6. Une interface Next.js fonctionnelle
 7. Une présentation orale avec démonstration
 ```
 
@@ -958,7 +962,7 @@ Ce projet permet de construire une solution Data Science complète autour d’un
 
 En utilisant le dataset Amazon Reviews 2023, nous pouvons analyser les avis clients, comprendre la satisfaction des utilisateurs, détecter les produits problématiques et proposer des recommandations.
 
-L’utilisation de PySpark permet de traiter efficacement un volume important de données, tandis que Streamlit permet de présenter les résultats sous forme d’une interface simple et interactive.
+L’utilisation de PySpark permet de traiter efficacement un volume important de données, tandis que Next.js permet de présenter les résultats sous forme d’une interface web moderne et interactive.
 
 Ce projet relie donc plusieurs compétences importantes :
 

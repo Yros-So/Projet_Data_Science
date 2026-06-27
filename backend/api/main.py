@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,10 +14,17 @@ from backend.etl.etl_spark import run_etl
 from backend.ml.recommendation import build_recommendations
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    ensure_gold_data()
+    yield
+
+
 app = FastAPI(
     title="Projet Data Science - E-commerce Reviews",
     description="API pour l'analyse des avis Amazon_Fashion, les KPIs, le sentiment et la recommandation.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -30,12 +39,6 @@ app.include_router(products_router)
 app.include_router(suppliers_router)
 app.include_router(admin_router)
 app.include_router(ml_router)
-
-
-@app.on_event("startup")
-def startup() -> None:
-    ensure_gold_data()
-
 
 @app.get("/")
 def root():
@@ -58,4 +61,3 @@ def run_pipeline_endpoint():
     build_recommendations()
     clear_cache()
     return result
-

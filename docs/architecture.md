@@ -21,7 +21,7 @@ Gold : KPIs, produits problematiques, fournisseurs, recommandations
 FastAPI
         |
         v
-Streamlit
+Next.js / React
 ```
 
 ## Couches de donnees
@@ -37,4 +37,3 @@ Si les donnees reelles ne sont pas presentes, le pipeline genere un jeu de donne
 - Client : consulte les produits, les avis et les recommandations.
 - Fournisseur : suit ses produits, son score et les produits a ameliorer.
 - Administrateur : surveille les KPIs globaux, les categories, les fournisseurs et les produits a risque.
-

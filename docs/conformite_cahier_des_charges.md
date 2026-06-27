@@ -14,7 +14,7 @@ Ce document relie le projet aux criteres attendus dans le sujet : dataset massif
 | ML supervise | Analyse de sentiment avec baseline, Naive Bayes et Logistic Regression. |
 | Recommandation | Similarite de contenu TF-IDF + popularite + taux positif. |
 | Evaluation | Metrics JSON, comparaison de modeles et matrice de confusion dans `models/metrics/`. |
-| Interface | Streamlit avec dashboard admin, catalogue, produit, fournisseur et prediction. |
+| Interface | Next.js/React avec dashboard admin, catalogue, produit, fournisseur et prediction. |
 | Reproductibilite | Scripts `scripts/run_pipeline.py`, `scripts/smoke_test.py`, tests `pytest`, `.env.example` et README. |
 
 ## Big Data
@@ -110,4 +110,3 @@ Les tests verifient :
 - PySpark est garde comme dependance optionnelle, mais le fallback pandas evite de bloquer sur Java/PySpark en local.
 - PostgreSQL est optionnel dans le MVP ; les fichiers Gold suffisent pour la demonstration rapide.
 - Le modele TF-IDF est explicable et rapide, mais un modele avance type BERT pourrait etre ajoute ensuite.
-

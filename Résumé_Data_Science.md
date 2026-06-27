@@ -1,4 +1,4 @@
-Voici un **résumé clair et utile pour démarrer le projet**, avec une logique cohérente entre **dataset, backend, frontend, utilisateurs, fournisseurs et résultats attendus**.
+﻿Voici un **résumé clair et utile pour démarrer le projet**, avec une logique cohérente entre **dataset, backend, frontend, utilisateurs, fournisseurs et résultats attendus**.
 
 Tu peux le copier dans ton `README.md`.
 
@@ -254,7 +254,7 @@ FastAPI
 Next.js / React
 ```
 
-Cette architecture est plus professionnelle que Streamlit, car elle est plus proche d’une vraie application web e-commerce.
+Cette architecture est proche d’une vraie application web e-commerce et reste cohérente avec un backend FastAPI.
 
 ---
 

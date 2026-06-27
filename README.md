@@ -1,6 +1,6 @@
 # Projet Data Science - Analyse des avis e-commerce
 
-Ce depot contient un MVP complet pour le projet Data Science : analyse des avis clients Amazon_Fashion, detection des produits problematiques, modele de sentiment, recommandations, API FastAPI et interface Streamlit.
+Ce depot contient un MVP complet pour le projet Data Science : analyse des avis clients Amazon_Fashion, detection des produits problematiques, modele de sentiment, recommandations, API FastAPI et interface Next.js.
 
 Le projet suit la logique des fichiers `Projet Data_Science.md` et `Résumé_Data_Science.md` :
 
@@ -25,7 +25,7 @@ Transformer les avis clients en informations utiles pour trois acteurs :
 | Machine Learning | Scikit-learn, TF-IDF, Logistic Regression |
 | Recommandation | Similarite de contenu + popularite |
 | API | FastAPI |
-| Interface | Streamlit |
+| Interface | Next.js, React |
 | Base optionnelle | PostgreSQL via Docker |
 
 ## Structure
@@ -39,7 +39,9 @@ backend/
   database/                        Schema et chargement PostgreSQL optionnel
 
 frontend/
-  app.py                           Interface Streamlit
+  app/                             Pages Next.js
+  lib/                             Client API
+  package.json                     Scripts frontend
 
 scripts/
   run_pipeline.py                  Lance ETL + recommandations + modele ML
@@ -135,18 +137,20 @@ GET  /suppliers/{supplier_id}/dashboard
 POST /ml/sentiment/predict
 ```
 
-## Etape 3 - Lancer le frontend
+## Etape 3 - Lancer le frontend Next.js
 
 Dans un deuxieme terminal :
 
 ```bash
-streamlit run frontend/app.py
+cd frontend
+npm install
+npm run dev
 ```
 
 Interface locale :
 
 ```text
-http://localhost:8501
+http://127.0.0.1:3000
 ```
 
 Pages disponibles :
@@ -215,7 +219,7 @@ git push Projet_Data_Science main
 2. Montrer l'architecture Bronze/Silver/Gold.
 3. Lancer `python scripts/run_pipeline.py`.
 4. Ouvrir `/docs` pour montrer l'API.
-5. Ouvrir Streamlit pour montrer les dashboards.
+5. Ouvrir l'interface Next.js pour montrer les dashboards.
 6. Tester une prediction de sentiment.
 7. Montrer les recommandations produit.
 8. Expliquer les limites et ameliorations possibles.

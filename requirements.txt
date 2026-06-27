@@ -4,7 +4,6 @@ scikit-learn>=1.5
 joblib>=1.4
 fastapi>=0.115
 uvicorn[standard]>=0.30
-streamlit>=1.36
 requests>=2.32
 python-dotenv>=1.0
 sqlalchemy>=2.0

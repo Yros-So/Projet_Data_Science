@@ -27,4 +27,7 @@ models/metrics/*
 logs/
 
 # Frontend
-frontend/.streamlit/secrets.toml
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
