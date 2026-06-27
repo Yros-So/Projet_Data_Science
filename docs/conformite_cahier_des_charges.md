@@ -36,6 +36,14 @@ data/bronze/raw_review_Amazon_Fashion/
 data/bronze/raw_meta_Amazon_Fashion/
 ```
 
+La version actuelle est volontairement un MVP local. Elle prouve la logique complete, mais ne pretend pas encore traiter les centaines de millions d'avis du dataset complet. L'architecture de passage au vrai Big Data est decrite dans :
+
+```text
+docs/architecture_big_data_cible.md
+```
+
+L'objectif cible est d'utiliser Spark pour les traitements lourds, Parquet partitionne pour le stockage analytique et PostgreSQL pour les tables finales servies par l'API.
+
 ## Stockage
 
 Le stockage analytique principal est Parquet :

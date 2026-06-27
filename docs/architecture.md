@@ -32,6 +32,21 @@ Next.js / React
 
 Si les donnees reelles ne sont pas presentes, le pipeline genere un jeu de donnees de demonstration pour permettre une execution locale rapide.
 
+## Architecture Big Data cible
+
+La version actuelle est un MVP local. L'architecture pour exploiter toute l'etendue du dataset Amazon Reviews 2023 est documentee ici :
+
+```text
+docs/architecture_big_data_cible.md
+```
+
+Ce document explique :
+
+- ce qui est deja fait ;
+- pourquoi le projet ne charge pas tout le dataset directement ;
+- comment passer a Spark, Parquet partitionne, PostgreSQL et modeles plus robustes ;
+- comment ameliorer la prediction des produits futurs achetables.
+
 ## Acteurs metier
 
 - Client : consulte les produits, les avis et les recommandations.

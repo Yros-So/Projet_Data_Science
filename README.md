@@ -242,6 +242,7 @@ Documents utiles pour la soutenance :
 
 - `docs/conformite_cahier_des_charges.md` : correspondance avec les criteres du projet ;
 - `docs/architecture.md` : schema technique ;
+- `docs/architecture_big_data_cible.md` : architecture cible pour traiter toute l'etendue Amazon Reviews 2023 ;
 - `docs/presentation.md` : plan oral ;
 - `docs/github_access.md` : verification de l'acces public GitHub.
 
