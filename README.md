@@ -92,6 +92,111 @@ Formats acceptes par le MVP : Parquet, CSV, JSON ou JSONL.
 
 Si ces dossiers sont vides, le pipeline genere automatiquement un jeu de donnees de demonstration multi-categories. Cela permet de tester tout le projet localement sans telecharger plusieurs Go de donnees.
 
+## Nature des tables Bronze, Silver, Gold et PostgreSQL
+
+Le projet suit une architecture data progressive. Chaque couche a un role precis.
+
+```text
+Bronze = donnees brutes
+Silver = donnees nettoyees et unifiees
+Gold = donnees metier pretes pour API/dashboard
+PostgreSQL = copie applicative des tables Gold
+```
+
+### Bronze
+
+Les tables Bronze correspondent aux donnees sources, presque comme elles arrivent depuis Amazon Reviews 2023.
+
+Exemples :
+
+```text
+data/bronze/Amazon_Fashion/reviews/
+data/bronze/Amazon_Fashion/metadata/
+data/bronze/All_Beauty/reviews/
+data/bronze/All_Beauty/metadata/
+```
+
+Utilite :
+
+- conserver la source originale ;
+- pouvoir retraiter le pipeline depuis le debut ;
+- ne pas perdre l'information brute ;
+- separer les donnees telechargees des donnees nettoyees.
+
+Ces donnees ne sont pas exposees directement au frontend, car elles peuvent etre volumineuses, incompletes ou non normalisees.
+
+### Silver
+
+Les tables Silver sont les donnees nettoyees et harmonisees.
+
+Tables principales :
+
+```text
+data/silver/reviews_clean/
+data/silver/products_clean/
+```
+
+Utilite :
+
+- nettoyer les avis et les produits ;
+- unifier les noms de colonnes ;
+- ajouter `domain`, `global_product_id`, `supplier_id` et `category_id` ;
+- preparer les jointures entre avis, produits, fournisseurs et categories ;
+- fournir une base propre pour les calculs Gold et le Machine Learning.
+
+Silver n'est pas la couche finale pour l'utilisateur. C'est la couche de preparation analytique.
+
+### Gold
+
+Les tables Gold sont les donnees finales orientees metier. Elles sont pretes pour FastAPI, PostgreSQL et le frontend Next.js.
+
+Tables principales :
+
+```text
+data/gold/products/
+data/gold/reviews_sample/
+data/gold/product_kpis/
+data/gold/supplier_kpis/
+data/gold/category_kpis/
+data/gold/global_dashboard/
+data/gold/problematic_products/
+data/gold/recommendations/
+data/gold/sentiment_stats/
+```
+
+Utilite des tables Gold :
+
+- `products` : catalogue enrichi avec scores, fournisseur, categorie et decision d'achat ;
+- `reviews_sample` : echantillon d'avis utilise pour les pages detail produit et fournisseur ;
+- `product_kpis` : note moyenne, avis positifs/negatifs, confiance, risque, score achetable ;
+- `supplier_kpis` : performance fournisseur, taux negatif, produits a ameliorer ;
+- `category_kpis` : categories a surveiller et performance globale par categorie ;
+- `global_dashboard` : indicateurs globaux pour l'administrateur ;
+- `problematic_products` : produits risqués ou a ameliorer ;
+- `recommendations` : recommandations de produits similaires ;
+- `sentiment_stats` : resume positif / neutre / negatif.
+
+Gold est la couche qui transforme les avis clients en information utile pour le client, le fournisseur et l'administrateur.
+
+### PostgreSQL
+
+PostgreSQL contient une copie des tables Gold.
+
+Utilite :
+
+- servir les donnees a FastAPI de facon plus applicative ;
+- indexer les tables finales ;
+- eviter de lire uniquement des fichiers dans une version plus avancee ;
+- preparer une architecture plus proche d'une vraie plateforme e-commerce.
+
+La chaine complete est donc :
+
+```text
+Bronze -> Silver -> Gold -> PostgreSQL -> FastAPI -> Next.js
+```
+
+En resume : Bronze garde la verite brute, Silver nettoie, Gold calcule la valeur metier, PostgreSQL sert l'application.
+
 ## Installation locale
 
 Depuis la racine du projet :
