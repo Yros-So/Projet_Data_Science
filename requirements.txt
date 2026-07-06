@@ -5,7 +5,7 @@ joblib==1.5.2
 fastapi==0.124.0
 uvicorn[standard]==0.38.0
 requests==2.32.5
-python-dotenv==1.2.1
+python-dotenv==1.2.2
 sqlalchemy==2.0.44
 psycopg2-binary==2.9.11
 pytest==9.0.1
