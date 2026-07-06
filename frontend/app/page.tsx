@@ -180,6 +180,18 @@ function cleanText(value?: string | null) {
     .replace(/Ã‰/g, "É");
 }
 
+function normalizeForSearch(value?: string | null) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function productSearchText(product: Product | ProductKpi) {
+  return normalizeForSearch(`${productLabel(product)} ${product.store ?? ""} ${product.main_category ?? ""} ${product.domain ?? ""}`);
+}
+
 function supplierKey(supplier: Supplier) {
   return `${supplier.supplier_id}-${supplier.domain ?? ""}`;
 }
@@ -328,6 +340,12 @@ function explainProduct(product: Product | ProductKpi) {
     return "Produit interessant, mais il faut lire les avis avant achat.";
   }
   return "Signaux négatifs trop présents pour un achat simple.";
+}
+
+function productMetrics(product: Product | ProductKpi) {
+  return `Note ${number(product.avg_rating, 2)}/5, ${number(product.nb_reviews)} avis, ${pct(product.negative_rate)} negatifs, confiance ${pct(
+    confidenceValue(product)
+  )}, risque ${pct(product.risk_score)}.`;
 }
 
 function productMatchesPeriod(product: Product | ProductKpi, period: PeriodFilter) {
@@ -903,31 +921,22 @@ export default function Home() {
     return Array.from(supplierNames).sort();
   }, [datasetFilter, domainProducts, filterOptions, suppliers]);
 
-  const scopedProducts = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    const filtered = domainProducts.filter((product) => {
-      const matchesSearch =
-        !normalized ||
-        `${product.title} ${product.store} ${product.main_category} ${product.domain}`.toLowerCase().includes(normalized);
+  const catalogBaseProducts = useMemo(() => {
+    const normalized = normalizeForSearch(query);
+    return domainProducts.filter((product) => {
+      const matchesSearch = !normalized || productSearchText(product).includes(normalized);
       const matchesCategory = categoryFilter === "all" || product.main_category === categoryFilter;
       const matchesSupplier = supplierFilter === "all" || product.store === supplierFilter;
       const matchesSentiment = sentimentFilter === "all" || product.dominant_sentiment === sentimentFilter;
       const matchesRisk = riskFilter === "all" || riskLevel(product) === riskFilter;
       const matchesPeriod = productMatchesPeriod(product, periodFilter);
-      const matchesDecision = decisionFilter === "all" || decision(product) === decisionFilter;
-      const matchesScore = buyability(product) >= minimumScore / 100;
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesSupplier &&
-        matchesSentiment &&
-        matchesRisk &&
-        matchesPeriod &&
-        matchesDecision &&
-        matchesScore
-      );
+      const matchesScore = confidenceValue(product) >= minimumScore / 100;
+      return matchesSearch && matchesCategory && matchesSupplier && matchesSentiment && matchesRisk && matchesPeriod && matchesScore;
     });
+  }, [categoryFilter, domainProducts, minimumScore, periodFilter, query, riskFilter, sentimentFilter, supplierFilter]);
 
+  const scopedProducts = useMemo(() => {
+    const filtered = catalogBaseProducts.filter((product) => decisionFilter === "all" || decision(product) === decisionFilter);
     return [...filtered].sort((a, b) => {
       if (sortMode === "future") {
         return futurePotential(b) - futurePotential(a);
@@ -943,18 +952,7 @@ export default function Home() {
       }
       return buyability(b) - buyability(a);
     });
-  }, [
-    categoryFilter,
-    decisionFilter,
-    domainProducts,
-    minimumScore,
-    periodFilter,
-    query,
-    riskFilter,
-    sentimentFilter,
-    sortMode,
-    supplierFilter
-  ]);
+  }, [catalogBaseProducts, decisionFilter, sortMode]);
 
   const scopedCategoryKpis = useMemo(() => {
     return categoryKpis
@@ -1040,7 +1038,7 @@ export default function Home() {
   }, [dashboard, isGlobalScope, scopedCategoryKpis]);
 
   const productSummary = useMemo(() => {
-    const values = scopedProducts.reduce(
+    const values = catalogBaseProducts.reduce(
       (acc, product) => {
         const productDecision = decision(product);
         acc[productDecision] = (acc[productDecision] ?? 0) + 1;
@@ -1053,7 +1051,7 @@ export default function Home() {
       watch: values["A surveiller"] ?? 0,
       avoid: values["A eviter"] ?? 0
     };
-  }, [scopedProducts]);
+  }, [catalogBaseProducts]);
 
   const topProducts = useMemo(
     () => [...scopedProducts].sort((a, b) => (b.popularity_score ?? 0) - (a.popularity_score ?? 0)).slice(0, 8),
@@ -1340,6 +1338,7 @@ export default function Home() {
 
         {!loading && !error && view === "client-catalogue" ? (
           <ClientCataloguePage
+            globalKpis={dashboardKpis}
             products={scopedProducts}
             productDetail={productDetail}
             productSummary={productSummary}
@@ -1630,6 +1629,7 @@ function AnalyticsPage({
 }
 
 function ClientCataloguePage({
+  globalKpis,
   products,
   productDetail,
   productSummary,
@@ -1644,6 +1644,7 @@ function ClientCataloguePage({
   setSortMode,
   onSelectProduct
 }: {
+  globalKpis: DashboardKpis;
   products: Product[];
   productDetail: Product | null;
   productSummary: { achetable: number; watch: number; avoid: number };
@@ -1661,9 +1662,16 @@ function ClientCataloguePage({
   return (
     <section className="grid">
       <div className="grid three">
-        <Metric icon={CheckCircle2} label="Achetables" value={number(productSummary.achetable)} sub="Choix simples" />
-        <Metric icon={AlertTriangle} label="À surveiller" value={number(productSummary.watch)} sub="Lire les avis" />
-        <Metric icon={ShieldCheck} label="À éviter" value={number(productSummary.avoid)} sub="Risque client" />
+        <Metric icon={CheckCircle2} label="Achetables" value={number(productSummary.achetable)} sub="Dans la liste chargee" />
+        <Metric icon={AlertTriangle} label="À surveiller" value={number(productSummary.watch)} sub="Dans la liste chargee" />
+        <Metric icon={ShieldCheck} label="À éviter" value={number(productSummary.avoid)} sub="Dans la liste chargee" />
+      </div>
+
+      <div className="catalog-context">
+        <strong>{number(products.length)} produits affiches</strong>
+        <span>
+          Vue rapide du catalogue. Base consolidee : {number(globalKpis.total_products)} produits Gold et {number(globalKpis.total_reviews)} avis.
+        </span>
       </div>
 
       <div className="toolbar">
@@ -2333,6 +2341,14 @@ function DataMlPage({
   );
 }
 
+type ChatMessage = {
+  id: number;
+  role: "user" | "assistant";
+  text: string;
+  title?: string;
+  products?: Product[];
+};
+
 function MiniAssistant({
   dashboard,
   products,
@@ -2354,11 +2370,31 @@ function MiniAssistant({
     "Quel fournisseur surveiller ?",
     "Comment lire les scores ?"
   ];
-  const [question, setQuestion] = useState(quickQuestions[0]);
-  const answer = useMemo(
-    () => buildBotAnswer(question, products, dashboard, selectedProduct),
-    [dashboard, products, question, selectedProduct]
-  );
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 1,
+      role: "assistant",
+      title: "Assistant IA",
+      text: "Pose une question libre sur un produit, un fournisseur, les volumes, les scores ou les avis. Je réponds avec les données visibles du projet.",
+      products: []
+    }
+  ]);
+
+  function submitQuestion(nextQuestion = draft) {
+    const value = nextQuestion.trim();
+    if (!value) {
+      return;
+    }
+    const answer = buildBotAnswer(value, products, dashboard, selectedProduct);
+    const baseId = Date.now();
+    setMessages((current) => [
+      ...current,
+      { id: baseId, role: "user", text: value },
+      { id: baseId + 1, role: "assistant", title: answer.title, text: answer.text, products: answer.products }
+    ]);
+    setDraft("");
+  }
 
   return (
     <div className="ai-assistant">
@@ -2374,47 +2410,56 @@ function MiniAssistant({
             </button>
           </div>
 
-          <div className="bot-message bot">
-            <Lightbulb size={18} />
-            <div>
-              <strong>{answer.title}</strong>
-              <p>{answer.text}</p>
-            </div>
+          <div className="chat-thread">
+            {messages.map((message) => (
+              <div className={`chat-message ${message.role}`} key={message.id}>
+                {message.role === "assistant" ? <Lightbulb size={17} /> : <MessageCircle size={17} />}
+                <div>
+                  {message.title ? <strong>{message.title}</strong> : null}
+                  <p>{message.text}</p>
+                  {message.products?.length ? (
+                    <div className="mini-products">
+                      {message.products.slice(0, 2).map((product) => (
+                        <button
+                          className="mini-product"
+                          key={productKey(product)}
+                          onClick={() => {
+                            onSelectProduct(productKey(product), "client-product");
+                            setOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <span className={decisionClass(decision(product))}>{decisionLabel(decision(product))}</span>
+                          <strong>{cleanText(product.title)}</strong>
+                          <small>{productMetrics(product)}</small>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ))}
           </div>
-
-          {answer.products.length ? (
-            <div className="mini-products">
-              {answer.products.slice(0, 2).map((product) => (
-                <button
-                  className="mini-product"
-                  key={productKey(product)}
-                  onClick={() => {
-                    onSelectProduct(productKey(product), "client-product");
-                    setOpen(false);
-                  }}
-                  type="button"
-                >
-                  <span className={decisionClass(decision(product))}>{decisionLabel(decision(product))}</span>
-                  <strong>{cleanText(product.title)}</strong>
-                </button>
-              ))}
-            </div>
-          ) : null}
 
           <div className="guide-input">
             <input
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Pose une question courte..."
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  submitQuestion();
+                }
+              }}
+              placeholder="Ex : pourquoi ce produit est a eviter ?"
             />
-            <button className="button" onClick={() => setQuestion(question.trim() || quickQuestions[0])} type="button">
+            <button className="button" onClick={() => submitQuestion()} type="button">
               <Send size={16} />
             </button>
           </div>
 
           <div className="quick-questions">
             {quickQuestions.map((item) => (
-              <button className="button secondary compact" key={item} onClick={() => setQuestion(item)} type="button">
+              <button className="button secondary compact" key={item} onClick={() => submitQuestion(item)} type="button">
                 {item}
               </button>
             ))}
@@ -2685,7 +2730,205 @@ function GuideBot({
   );
 }
 
+type BotAnswer = {
+  question: string;
+  title: string;
+  text: string;
+  products: Product[];
+};
+
+const botStopWords = new Set([
+  "quel",
+  "quelle",
+  "quels",
+  "quelles",
+  "produit",
+  "produits",
+  "fournisseur",
+  "fournisseurs",
+  "score",
+  "scores",
+  "avis",
+  "avec",
+  "pour",
+  "dans",
+  "sur",
+  "est",
+  "sont",
+  "les",
+  "des",
+  "une",
+  "mon",
+  "ton",
+  "ce",
+  "cette",
+  "comment",
+  "pourquoi"
+]);
+
+function questionTerms(rawQuestion: string) {
+  return normalizeForSearch(rawQuestion)
+    .split(/[^a-z0-9]+/)
+    .filter((term) => term.length > 2 && !botStopWords.has(term));
+}
+
+function findQuestionProducts(rawQuestion: string, products: Product[]) {
+  const terms = questionTerms(rawQuestion);
+  if (!terms.length) {
+    return [];
+  }
+  return products
+    .map((product) => {
+      const haystack = productSearchText(product);
+      const score = terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
+      return { product, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || buyability(b.product) - buyability(a.product))
+    .map((item) => item.product);
+}
+
+function topSupplierForQuestion(rawQuestion: string, products: Product[], dashboard: AdminDashboard | null) {
+  const normalized = normalizeForSearch(rawQuestion);
+  const candidates = dashboard?.supplier_ranking ?? [];
+  const exactSupplier =
+    candidates.find((supplier) => normalized.includes(normalizeForSearch(supplier.store))) ??
+    candidates.find((supplier) =>
+      products.some((product) => product.store === supplier.store && normalized.includes(normalizeForSearch(product.store)))
+    );
+  return (
+    exactSupplier ??
+    candidates.find((candidate) =>
+      products.some((product) => product.store === candidate.store && (!candidate.domain || product.domain === candidate.domain))
+    ) ??
+    candidates[0]
+  );
+}
+
+function productAnswer(product: Product) {
+  return `${cleanText(product.title)} est classe ${decisionLabel(decision(product))}. ${productMetrics(product)} ${explainProduct(product)}`;
+}
+
 function buildBotAnswer(
+  rawQuestion: string,
+  products: Product[],
+  dashboard: AdminDashboard | null,
+  selectedProduct: Product | null
+): BotAnswer {
+  const normalized = normalizeForSearch(rawQuestion);
+  const matchedProducts = findQuestionProducts(rawQuestion, products);
+  const focusProduct = matchedProducts[0] ?? selectedProduct;
+  const rankedByBuy = [...products].sort((a, b) => buyability(b) - buyability(a));
+  const rankedByFuture = [...products].sort((a, b) => futurePotential(b) - futurePotential(a));
+  const rankedByRisk = [...products].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0));
+  const best = rankedByBuy[0];
+  const risky = rankedByRisk[0];
+  const future = rankedByFuture[0];
+  const supplier = topSupplierForQuestion(rawQuestion, products, dashboard);
+  const global = dashboard?.global_kpis;
+  const scale = dashboard?.data_quality_report?.scale;
+
+  if (/^(salut|bonjour|hello|coucou|bonsoir)\b/.test(normalized)) {
+    return {
+      question: rawQuestion,
+      title: "Assistant IA",
+      text:
+        "Je peux analyser un produit précis, expliquer une décision, comparer les scores, identifier les fournisseurs à surveiller ou résumer le volume de données. Pose ta question librement.",
+      products: focusProduct ? [focusProduct] : rankedByBuy.slice(0, 2)
+    };
+  }
+
+  if (normalized.includes("combien") || normalized.includes("volume") || normalized.includes("million") || normalized.includes("dataset")) {
+    const totalReviews = global?.total_reviews ?? products.reduce((sum, product) => sum + (product.nb_reviews ?? 0), 0);
+    const materializedReviews = scale?.detail_reviews_processed ?? global?.detail_reviews_processed ?? totalReviews;
+    const target = scale?.target_total_reviews;
+    return {
+      question: rawQuestion,
+      title: "Volume de donnees",
+      text: `Le tableau de bord represente ${number(totalReviews)} avis consolides et ${number(
+        global?.total_products ?? products.length
+      )} produits. Le navigateur ne charge qu'un echantillon exploitable de ${number(
+        products.length
+      )} cartes pour rester rapide. Les avis detailles materialises sont ${number(materializedReviews)}${
+        target ? ` sur un objectif de ${number(target)}` : ""
+      }.`,
+      products: rankedByBuy.slice(0, 2)
+    };
+  }
+
+  if (
+    focusProduct &&
+    (matchedProducts.length ||
+      normalized.includes("ce produit") ||
+      normalized.includes("pourquoi") ||
+      normalized.includes("risque") ||
+      normalized.includes("confiance") ||
+      normalized.includes("decision"))
+  ) {
+    return {
+      question: rawQuestion,
+      title: "Analyse produit",
+      text: productAnswer(focusProduct),
+      products: [focusProduct, ...rankedByBuy.filter((product) => productKey(product) !== productKey(focusProduct)).slice(0, 1)]
+    };
+  }
+
+  if (normalized.includes("futur") || normalized.includes("avenir") || normalized.includes("marcher")) {
+    return {
+      question: rawQuestion,
+      title: "Potentiel futur",
+      text: future
+        ? `${cleanText(future.title)} a le meilleur potentiel futur : ${pct(
+            futurePotential(future)
+          )}. Le calcul favorise les produits avec avis positifs, confiance suffisante et popularite.`
+        : "Je n'ai pas encore assez de donnees produit.",
+      products: future ? rankedByFuture.slice(0, 3) : []
+    };
+  }
+
+  if (normalized.includes("eviter") || normalized.includes("risque") || normalized.includes("mauvais") || normalized.includes("negatif")) {
+    return {
+      question: rawQuestion,
+      title: "Produits a eviter ou surveiller",
+      text: risky ? `${cleanText(risky.title)} ressort en priorite risque. ${productMetrics(risky)} ${explainProduct(risky)}` : "Je n'ai pas encore assez de donnees produit.",
+      products: risky ? rankedByRisk.slice(0, 3) : []
+    };
+  }
+
+  if (normalized.includes("score") || normalized.includes("comprendre") || normalized.includes("difference") || normalized.includes("100")) {
+    return {
+      question: rawQuestion,
+      title: "Lecture des scores",
+      text:
+        "La decision client n'est pas une certitude a 100%. Elle combine note, taux negatif, risque, confiance et volume d'avis. Une confiance elevee veut dire donnees coherentes; un faible nombre d'avis force le produit en surveillance.",
+      products: focusProduct ? [focusProduct] : rankedByBuy.slice(0, 2)
+    };
+  }
+
+  if (normalized.includes("fournisseur") || normalized.includes("vendeur") || normalized.includes("store")) {
+    return {
+      question: rawQuestion,
+      title: "Fournisseur a surveiller",
+      text: supplier
+        ? `${cleanText(supplier.store)} : ${number(supplier.nb_products)} produits, ${number(supplier.nb_reviews)} avis, ${pct(
+            supplier.supplier_negative_rate
+          )} d'avis negatifs et ${number(supplier.nb_problematic_products ?? 0)} produits problematiques.`
+        : "Je n'ai pas encore assez de donnees fournisseur.",
+      products: rankedByRisk
+        .filter((product) => product.store === supplier?.store && (!supplier?.domain || product.domain === supplier.domain))
+        .slice(0, 3)
+    };
+  }
+
+  return {
+    question: rawQuestion,
+    title: "Meilleur choix conseille",
+    text: best ? productAnswer(best) : "Je n'ai pas encore assez de donnees produit.",
+    products: best ? rankedByBuy.slice(0, 3) : []
+  };
+}
+
+function buildBotAnswerLegacy(
   rawQuestion: string,
   products: Product[],
   dashboard: AdminDashboard | null,
