@@ -13,6 +13,7 @@ export type GlobalKpis = {
   positive_rate_global: number;
   negative_rate_global: number;
   data_source: string;
+  detail_reviews_processed?: number;
 };
 
 export type Product = {
@@ -138,9 +139,11 @@ export type ApiHealth = {
 export type DataQualityScale = {
   status: string;
   actual_reviews: number;
+  detail_reviews_processed?: number;
   reviews_by_dataset?: Record<string, number>;
   datasets_under_target?: Record<string, number>;
   min_reviews_required_per_dataset?: number;
+  target_total_reviews?: number;
   target_range_reviews_per_dataset?: string;
   uses_demo_data?: boolean;
   message?: string;
@@ -479,6 +482,9 @@ function predictStaticSentiment(text: string): SentimentResult {
     "decevant",
     "trop petit",
     "trop petite",
+    "trop grand",
+    "trop grande",
+    "trop large",
     "ne fonctionne pas",
     "poor",
     "bad",

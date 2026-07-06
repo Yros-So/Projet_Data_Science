@@ -11,6 +11,7 @@ import {
   MessageCircle,
   PackageSearch,
   RefreshCw,
+  Send,
   Search,
   ShieldCheck,
   ShoppingBag,
@@ -91,6 +92,19 @@ type PipelineRunResult = {
   };
 };
 
+type DashboardKpis = {
+  total_reviews: number;
+  total_products: number;
+  total_suppliers: number;
+  total_categories: number;
+  average_rating_global: number;
+  positive_rate_global?: number;
+  negative_rate_global: number;
+  domains?: string[];
+  data_source?: string;
+  detail_reviews_processed?: number;
+};
+
 type NavItem = {
   id: View;
   label: string;
@@ -103,15 +117,14 @@ const navGroups: Array<{ title: string; items: NavItem[] }> = [
     title: "Pilotage",
     items: [
       { id: "admin", label: "Vue d'ensemble", icon: BarChart3, adminOnly: true },
-      { id: "analytics", label: "Analyse donnees", icon: TrendingUp, adminOnly: true }
+      { id: "analytics", label: "Analyse données", icon: TrendingUp, adminOnly: true }
     ]
   },
   {
     title: "Produits et clients",
     items: [
       { id: "client-catalogue", label: "Catalogue", icon: ShoppingBag },
-      { id: "client-product", label: "Detail produit", icon: PackageSearch },
-      { id: "client-recommendations", label: "Recommandations", icon: Target },
+      { id: "client-product", label: "Détail produit", icon: PackageSearch },
       { id: "client-sentiment", label: "Analyse sentiment", icon: Brain }
     ]
   },
@@ -119,18 +132,12 @@ const navGroups: Array<{ title: string; items: NavItem[] }> = [
     title: "Espace fournisseur",
     items: [
       { id: "supplier-dashboard", label: "Dashboard fournisseur", icon: Store },
-      { id: "supplier-products", label: "Mes produits", icon: ShoppingBag },
-      { id: "supplier-negative", label: "Avis negatifs", icon: MessageCircle },
-      { id: "supplier-actions", label: "Actions", icon: Lightbulb }
+      { id: "supplier-negative", label: "Avis négatifs", icon: MessageCircle }
     ]
   },
   {
     title: "Big Data & ML",
-    items: [{ id: "data-ml", label: "Pipeline et modeles", icon: Brain }]
-  },
-  {
-    title: "Guide",
-    items: [{ id: "guide", label: "Architecture", icon: Bot }]
+    items: [{ id: "data-ml", label: "Pipeline et modèles", icon: Brain }]
   }
 ];
 
@@ -173,6 +180,22 @@ function productLabel(product: Product | ProductKpi) {
   return "product_title" in product ? product.product_title : product.title;
 }
 
+function cleanText(value?: string | null) {
+  return (value ?? "")
+    .replace(/â/g, "'")
+    .replace(/â|â/g, '"')
+    .replace(/â|â/g, "-")
+    .replace(/Â /g, " ")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã¨/g, "è")
+    .replace(/Ã /g, "à")
+    .replace(/Ã§/g, "ç")
+    .replace(/Ã´/g, "ô")
+    .replace(/Ã»/g, "û")
+    .replace(/Ã®/g, "î")
+    .replace(/Ã‰/g, "É");
+}
+
 function supplierKey(supplier: Supplier) {
   return `${supplier.supplier_id}-${supplier.domain ?? ""}`;
 }
@@ -181,6 +204,14 @@ function mergeSuppliers(...groups: Supplier[][]) {
   const merged = new Map<string, Supplier>();
   groups.flat().forEach((supplier) => {
     merged.set(supplierKey(supplier), supplier);
+  });
+  return Array.from(merged.values());
+}
+
+function mergeProducts(...groups: Product[][]) {
+  const merged = new Map<string, Product>();
+  groups.flat().forEach((product) => {
+    merged.set(productKey(product), product);
   });
   return Array.from(merged.values());
 }
@@ -217,17 +248,17 @@ function decision(product: Product | ProductKpi) {
 function confidenceLabel(product: Product | ProductKpi) {
   const score = product.confidence_score ?? buyability(product);
   if (score >= 0.74) {
-    return "Confiance elevee";
+    return "Confiance élevée";
   }
   if (score >= 0.55) {
     return "Confiance moyenne";
   }
-  return "Produit a surveiller";
+  return "Produit à surveiller";
 }
 
 function confidenceClass(product: Product | ProductKpi) {
   const label = confidenceLabel(product);
-  if (label === "Confiance elevee") {
+  if (label === "Confiance élevée") {
     return "pill good";
   }
   if (label === "Confiance moyenne") {
@@ -257,6 +288,16 @@ function decisionClass(value: string) {
   return "pill warn";
 }
 
+function decisionLabel(value: string) {
+  if (value === "A surveiller") {
+    return "À surveiller";
+  }
+  if (value === "A eviter") {
+    return "À éviter";
+  }
+  return value;
+}
+
 function sentimentClass(value?: string) {
   if (value === "negatif") {
     return "pill warn";
@@ -278,7 +319,7 @@ function explainProduct(product: Product | ProductKpi) {
   if (value === "A surveiller") {
     return "Produit interessant, mais il faut lire les avis avant achat.";
   }
-  return "Signaux negatifs trop presents pour un achat simple.";
+  return "Signaux négatifs trop présents pour un achat simple.";
 }
 
 function productMatchesPeriod(product: Product | ProductKpi, period: PeriodFilter) {
@@ -393,7 +434,7 @@ function BarList({
           );
         })
       ) : (
-        <div className="empty">Aucune donnee pour ce filtre.</div>
+        <div className="empty">Aucune donnée pour ce filtre.</div>
       )}
     </div>
   );
@@ -520,7 +561,7 @@ function ProductSelect({
       <select value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)}>
         {products.map((product) => (
           <option value={productKey(product)} key={productKey(product)}>
-            {product.domain} - {product.title}
+            {product.domain} - {cleanText(product.title)}
           </option>
         ))}
       </select>
@@ -544,7 +585,7 @@ function SupplierSelect({
         {suppliers.map((supplier) => (
           <option value={supplier.supplier_id} key={supplier.supplier_id}>
             {supplier.domain ? `${supplier.domain} - ` : ""}
-            {supplier.store}
+            {cleanText(supplier.store)}
           </option>
         ))}
       </select>
@@ -577,10 +618,11 @@ export default function Home() {
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("smart");
   const [minimumScore, setMinimumScore] = useState(0);
-  const [reviewText, setReviewText] = useState("Produit de mauvaise qualite, taille trop petite.");
+  const [reviewText, setReviewText] = useState("Produit de mauvaise qualité, taille trop grande.");
   const [sentiment, setSentiment] = useState<SentimentResult | null>(null);
   const [pipelineResult, setPipelineResult] = useState<PipelineRunResult | null>(null);
   const [pipelineLoading, setPipelineLoading] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -588,7 +630,17 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const [healthData, filterData, dashboardData, productData, supplierData, riskySupplierData, categoryData] = await Promise.all([
+      const [
+        healthData,
+        filterData,
+        dashboardData,
+        productData,
+        riskyProductData,
+        watchProductData,
+        supplierData,
+        riskySupplierData,
+        categoryData
+      ] = await Promise.all([
         apiGet<ApiHealth>("/health"),
         apiGet<FilterOptions>("/filters/options"),
         apiGet<AdminDashboard>(apiPath("/admin/dashboard", { domain: datasetFilter, risk: riskFilter })),
@@ -607,6 +659,34 @@ export default function Home() {
             })
           )
         ),
+        apiGet<Product[]>(
+          apiPath("/products", {
+            limit: 200,
+            search: query.trim() || undefined,
+            domain: datasetFilter,
+            category: categoryFilter,
+            supplier: supplierFilter,
+            sentiment: sentimentFilter,
+            risk: riskFilter,
+            year: periodFilter,
+            sort_by: "risque",
+            sort_order: "desc"
+          })
+        ),
+        apiGet<Product[]>(
+          apiPath("/products", {
+            limit: 200,
+            search: query.trim() || undefined,
+            domain: datasetFilter,
+            category: categoryFilter,
+            supplier: supplierFilter,
+            sentiment: sentimentFilter,
+            risk: riskFilter === "all" ? "moyen" : riskFilter,
+            year: periodFilter,
+            sort_by: "achetable",
+            sort_order: "desc"
+          })
+        ),
         apiGet<Supplier[]>(apiPath("/suppliers", { limit: 100, domain: datasetFilter, risk: riskFilter })),
         apiGet<Supplier[]>(
           apiPath("/suppliers", {
@@ -620,13 +700,14 @@ export default function Home() {
         apiGet<CategoryKpi[]>(apiPath("/categories/performance", { limit: 100, domain: datasetFilter, risk: riskFilter }))
       ]);
       const mergedSuppliers = mergeSuppliers(supplierData, riskySupplierData);
+      const mergedProducts = mergeProducts(productData, riskyProductData, watchProductData);
       setApiHealth(healthData);
       setFilterOptions(filterData);
       setDashboard(dashboardData);
-      setProducts(productData);
+      setProducts(mergedProducts);
       setSuppliers(mergedSuppliers);
       setCategoryKpis(categoryData);
-      setSelectedProductId((current) => current || (productData[0] ? productKey(productData[0]) : ""));
+      setSelectedProductId((current) => current || (mergedProducts[0] ? productKey(mergedProducts[0]) : ""));
       setSelectedSupplierId((current) => current || mergedSuppliers[0]?.supplier_id || "");
     } catch (apiError) {
       setError(apiError instanceof Error ? apiError.message : "API indisponible");
@@ -800,6 +881,41 @@ export default function Home() {
     ];
   }, [scopedProducts, visibleKpis.average_rating_global]);
 
+  const isGlobalScope = useMemo(() => {
+    return (
+      datasetFilter === "all" &&
+      categoryFilter === "all" &&
+      supplierFilter === "all" &&
+      sentimentFilter === "all" &&
+      riskFilter === "all" &&
+      periodFilter === "all" &&
+      decisionFilter === "all" &&
+      minimumScore === 0 &&
+      query.trim() === ""
+    );
+  }, [categoryFilter, datasetFilter, decisionFilter, minimumScore, periodFilter, query, riskFilter, sentimentFilter, supplierFilter]);
+
+  const dashboardKpis = useMemo(() => {
+    if (isGlobalScope && dashboard?.global_kpis) {
+      return dashboard.global_kpis;
+    }
+    return visibleKpis;
+  }, [dashboard, isGlobalScope, visibleKpis]);
+
+  const dashboardSentimentRows = useMemo(() => {
+    if (isGlobalScope && dashboard?.sentiment_stats?.length) {
+      return dashboard.sentiment_stats;
+    }
+    return sentimentRows;
+  }, [dashboard, isGlobalScope, sentimentRows]);
+
+  const dashboardCategories = useMemo(() => {
+    if (isGlobalScope && dashboard?.categories?.length) {
+      return dashboard.categories;
+    }
+    return scopedCategoryKpis;
+  }, [dashboard, isGlobalScope, scopedCategoryKpis]);
+
   const productSummary = useMemo(() => {
     const values = scopedProducts.reduce(
       (acc, product) => {
@@ -825,6 +941,13 @@ export default function Home() {
     () => [...scopedProducts].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0)).slice(0, 12),
     [scopedProducts]
   );
+
+  const dashboardProblematicProducts = useMemo(() => {
+    if (isGlobalScope && dashboard?.problematic_products?.length) {
+      return dashboard.problematic_products;
+    }
+    return problematicProducts;
+  }, [dashboard, isGlobalScope, problematicProducts]);
 
   const riskySuppliers = useMemo(() => {
     return [...scopedSuppliers].sort(
@@ -944,32 +1067,32 @@ export default function Home() {
 
   const activeTitle: Record<View, string> = {
     admin: "Dashboard administrateur",
-    analytics: "Analyse des donnees",
+    analytics: "Analyse des données",
     "client-catalogue": "Catalogue client",
-    "client-product": "Detail produit",
+    "client-product": "Détail produit",
     "client-recommendations": "Recommandations client",
     "client-sentiment": "Analyse sentiment",
     "supplier-dashboard": "Dashboard fournisseur",
     "supplier-products": "Mes produits",
-    "supplier-negative": "Avis negatifs",
-    "supplier-actions": "Actions recommandees",
+    "supplier-negative": "Avis négatifs",
+    "supplier-actions": "Actions recommandées",
     "data-ml": "Data & Machine Learning",
     guide: "Architecture et documentation"
   };
 
   const activeDescription: Record<View, string> = {
     admin: "Vue de pilotage : volume, alertes, sentiment et produits prioritaires.",
-    analytics: "Graphiques de repartition, tendance, risques et performance par dataset.",
-    "client-catalogue": "Recherche et comparaison des produits avec filtres metier.",
-    "client-product": "Fiche detaillee, avis recents et recommandations du produit selectionne.",
-    "client-recommendations": "Produits similaires classes par score hybride.",
-    "client-sentiment": "Test direct du modele de classification de sentiment.",
-    "supplier-dashboard": "Synthese fournisseur : score, produits et avis negatifs.",
-    "supplier-products": "Liste des produits rattaches au fournisseur selectionne.",
-    "supplier-negative": "Avis negatifs utiles pour prioriser les corrections.",
-    "supplier-actions": "Actions recommandees a partir des signaux faibles.",
-    "data-ml": "Suivi Big Data, qualite, pipeline et entrainement ML.",
-    guide: "Lecture fonctionnelle de la chaine Bronze, Silver, Gold, API et interface."
+    analytics: "Graphiques de répartition, tendance, risques et performance par dataset.",
+    "client-catalogue": "Recherche et comparaison des produits avec filtres métier.",
+    "client-product": "Fiche détaillée, avis récents et recommandations du produit sélectionné.",
+    "client-recommendations": "Produits similaires classés par score hybride.",
+    "client-sentiment": "Test direct du modèle de classification de sentiment.",
+    "supplier-dashboard": "Synthèse fournisseur : score, produits et avis négatifs.",
+    "supplier-products": "Liste des produits rattachés au fournisseur sélectionné.",
+    "supplier-negative": "Avis négatifs utiles pour prioriser les corrections.",
+    "supplier-actions": "Actions recommandées à partir des signaux faibles.",
+    "data-ml": "Suivi Big Data, qualité, pipeline et entraînement ML.",
+    guide: "Lecture fonctionnelle de la chaîne Bronze, Silver, Gold, API et interface."
   };
 
   return (
@@ -1011,7 +1134,7 @@ export default function Home() {
 
           <div className="dataset-picker filter-panel">
             <div className="nav-group-title">Filtres globaux</div>
-            <label htmlFor="dataset-select">Categorie dataset</label>
+            <label htmlFor="dataset-select">Catégorie dataset</label>
             <select id="dataset-select" value={datasetFilter} onChange={(event) => setDatasetFilter(event.target.value)}>
               <option value="all">Toutes</option>
               {domainOptions.map((domain) => (
@@ -1021,7 +1144,7 @@ export default function Home() {
               ))}
             </select>
 
-            <label htmlFor="category-select">Categorie produit</label>
+            <label htmlFor="category-select">Catégorie produit</label>
             <select id="category-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
               <option value="all">Toutes</option>
               {categoryOptions.map((category) => (
@@ -1050,7 +1173,7 @@ export default function Home() {
               <option value="all">Tous</option>
               <option value="positif">Positif</option>
               <option value="neutre">Neutre</option>
-              <option value="negatif">Negatif</option>
+              <option value="negatif">Négatif</option>
             </select>
 
             <label htmlFor="risk-filter">Niveau de risque</label>
@@ -1061,7 +1184,7 @@ export default function Home() {
               <option value="eleve">Eleve</option>
             </select>
 
-            <label htmlFor="period-filter">Periode</label>
+            <label htmlFor="period-filter">Période</label>
             <select id="period-filter" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
               <option value="all">Toutes</option>
               {(filterOptions?.years.length ? filterOptions.years : [2020, 2021, 2022, 2023]).map((year) => (
@@ -1105,28 +1228,28 @@ export default function Home() {
         </div>
 
         {error ? <div className="error">{error}</div> : null}
-        {loading ? <div className="empty">Chargement des donnees...</div> : null}
+        {loading ? <div className="empty">Chargement des données...</div> : null}
 
         {!loading && !error && view === "admin" ? (
           <AdminPage
-            categories={scopedCategoryKpis}
+            categories={dashboardCategories}
             dataQualityReport={dashboard?.data_quality_report ?? null}
-            kpis={visibleKpis}
-            problematicProducts={problematicProducts}
+            kpis={dashboardKpis}
+            problematicProducts={dashboardProblematicProducts}
             riskySuppliers={riskySuppliers}
-            sentimentRows={sentimentRows}
+            sentimentRows={dashboardSentimentRows}
             onSelectProduct={selectProduct}
           />
         ) : null}
 
         {!loading && !error && view === "analytics" ? (
           <AnalyticsPage
-            categories={scopedCategoryKpis}
+            categories={dashboardCategories}
             dataQualityReport={dashboard?.data_quality_report ?? null}
-            kpis={visibleKpis}
+            kpis={dashboardKpis}
             products={scopedProducts}
             riskySuppliers={riskySuppliers}
-            sentimentRows={sentimentRows}
+            sentimentRows={dashboardSentimentRows}
           />
         ) : null}
 
@@ -1216,9 +1339,9 @@ export default function Home() {
         {!loading && !error && view === "data-ml" ? (
           <DataMlPage
             apiHealth={apiHealth}
-            categories={scopedCategoryKpis}
+            categories={dashboardCategories}
             dataQualityReport={dashboard?.data_quality_report ?? null}
-            kpis={visibleKpis}
+            kpis={dashboardKpis}
             onRunPipeline={runLiveTraining}
             pipelineLoading={pipelineLoading}
             pipelineResult={pipelineResult}
@@ -1226,9 +1349,14 @@ export default function Home() {
           />
         ) : null}
 
-        {!loading && !error && view === "guide" ? (
-          <GuidePage dashboard={dashboard} products={scopedProducts} selectedProduct={productDetail} onSelectProduct={selectProduct} />
-        ) : null}
+        <MiniAssistant
+          dashboard={dashboard}
+          onSelectProduct={selectProduct}
+          open={assistantOpen}
+          products={scopedProducts}
+          selectedProduct={productDetail}
+          setOpen={setAssistantOpen}
+        />
       </main>
     </div>
   );
@@ -1245,15 +1373,8 @@ function AdminPage({
 }: {
   categories: CategoryKpi[];
   dataQualityReport: DataQualityReport | null;
-  kpis: {
-    total_reviews: number;
-    total_products: number;
-    total_suppliers: number;
-    total_categories: number;
-    average_rating_global: number;
-    negative_rate_global: number;
-  };
-  problematicProducts: Product[];
+  kpis: DashboardKpis;
+  problematicProducts: Array<Product | ProductKpi>;
   riskySuppliers: Supplier[];
   sentimentRows: Array<{ sentiment: string; nb_reviews: number; avg_rating: number }>;
   onSelectProduct: (id: string) => void;
@@ -1276,8 +1397,8 @@ function AdminPage({
       {!scaleReady ? (
         <div className="panel">
           <div className="panel-header">
-            <h2>Volume donnees sous seuil manager</h2>
-            <span className="pill warn">Demo / insuffisant</span>
+            <h2>Volume données sous seuil manager</h2>
+            <span className="pill warn">Démo / insuffisant</span>
           </div>
           <div className="panel-body reviews">
             <div className="review">
@@ -1285,8 +1406,8 @@ function AdminPage({
               minimum pour les {datasetCount} datasets actifs.
             </div>
             <div className="review">
-              Volume actuellement charge : {number(scale?.actual_reviews ?? kpis.total_reviews)} avis. Le modele actuel est
-              donc seulement une demonstration locale, pas l'entrainement final.
+              Volume actuellement chargé : {number(scale?.actual_reviews ?? kpis.total_reviews)} avis. Le modèle actuel est
+              donc seulement une démonstration locale, pas l'entraînement final.
             </div>
             {Object.entries(reviewsByDataset).map(([domain, count]) => (
               <div className="review" key={domain}>
@@ -1299,18 +1420,18 @@ function AdminPage({
       ) : null}
 
       <div className="grid metrics">
-        <Metric icon={ShoppingBag} label="Avis charges" value={number(kpis.total_reviews)} />
+        <Metric icon={ShoppingBag} label="Avis analysés" value={number(kpis.total_reviews)} />
         <Metric icon={Target} label="Objectif minimum" value={number(minimumTotalTarget)} />
         <Metric icon={PackageSearch} label="Produits" value={number(kpis.total_products)} />
         <Metric icon={Store} label="Fournisseurs" value={number(kpis.total_suppliers)} />
         <Metric icon={Star} label="Note moyenne" value={number(kpis.average_rating_global, 2)} />
-        <Metric icon={AlertTriangle} label="Avis negatifs" value={pct(kpis.negative_rate_global)} />
+        <Metric icon={AlertTriangle} label="Avis négatifs" value={pct(kpis.negative_rate_global)} />
       </div>
 
       <div className="grid two">
         <div className="panel">
           <div className="panel-header">
-            <h2>Categories a surveiller</h2>
+            <h2>Catégories à surveiller</h2>
           </div>
           <div className="panel-body">
             <BarList
@@ -1319,7 +1440,7 @@ function AdminPage({
                 .sort((a, b) => b.risk_score - a.risk_score)
                 .slice(0, 8)
                 .map((category) => ({
-                  label: `${category.domain} - ${category.main_category}`,
+                  label: `${category.domain} - ${cleanText(category.main_category)}`,
                   value: category.negative_rate
                 }))}
               labelKey="label"
@@ -1349,7 +1470,7 @@ function AdminPage({
           onSelect={onSelectProduct}
           products={problematicProducts.slice(0, 8)}
           scoreKey="risk_score"
-          title="Produits problematiques"
+          title="Produits problématiques"
         />
       </div>
     </section>
@@ -1366,14 +1487,7 @@ function AnalyticsPage({
 }: {
   categories: CategoryKpi[];
   dataQualityReport: DataQualityReport | null;
-  kpis: {
-    total_reviews: number;
-    total_products: number;
-    total_suppliers: number;
-    total_categories: number;
-    average_rating_global: number;
-    negative_rate_global: number;
-  };
+  kpis: DashboardKpis;
   products: Product[];
   riskySuppliers: Supplier[];
   sentimentRows: Array<{ sentiment: string; nb_reviews: number; avg_rating: number }>;
@@ -1383,58 +1497,16 @@ function AnalyticsPage({
   const minReviewsPerDataset = scale?.min_reviews_required_per_dataset ?? 1500000;
   const datasetCount = Math.max(Object.keys(reviewsByDataset).length, 1);
   const minimumTotalTarget = minReviewsPerDataset * datasetCount;
-  const years = [2020, 2021, 2022, 2023];
   const sentimentChartRows = sentimentRows.map((row) => ({
     label: row.sentiment,
     value: row.nb_reviews,
     color: row.sentiment === "positif" ? "#157f72" : row.sentiment === "negatif" ? "#c75832" : "#d28a25"
   }));
-  const domainRows = Object.entries(
-    products.reduce<Record<string, number>>((acc, product) => {
-      acc[product.domain] = (acc[product.domain] ?? 0) + (product.nb_reviews ?? 0);
-      return acc;
-    }, {})
-  ).map(([domain, reviews]) => ({ domain, reviews }));
-  const trendRows = years.map((year) => {
-    const value = products.reduce((sum, product) => {
-      const min = product.min_review_year ?? year;
-      const max = product.max_review_year ?? year;
-      if (year < min || year > max) {
-        return sum;
-      }
-      return sum + Math.round((product.nb_reviews ?? 0) / Math.max(max - min + 1, 1));
-    }, 0);
-    return { label: String(year), value };
-  });
-  const decisionRows = ["Achetable", "A surveiller", "A eviter"].map((label, index) => ({
-    label,
-    value: products.filter((product) => decision(product) === label).length,
-    color: ["#157f72", "#d28a25", "#c75832"][index]
-  }));
-  const scoreRows = [
-    {
-      label: "Confiance moyenne",
-      value: products.reduce((sum, product) => sum + (product.confidence_score ?? buyability(product)), 0) / Math.max(products.length, 1),
-      color: "#157f72"
-    },
-    {
-      label: "Achat recommande",
-      value: products.reduce((sum, product) => sum + buyability(product), 0) / Math.max(products.length, 1),
-      color: "#496783"
-    },
-    {
-      label: "Potentiel futur",
-      value: products.reduce((sum, product) => sum + futurePotential(product), 0) / Math.max(products.length, 1),
-      color: "#6f7d2c"
-    },
-    {
-      label: "Risque moyen",
-      value: products.reduce((sum, product) => sum + (product.risk_score ?? 0), 0) / Math.max(products.length, 1),
-      color: "#c75832"
-    }
-  ];
+  const domainRows = Object.entries(reviewsByDataset).map(([domain, reviews]) => ({ domain, reviews }));
+  const detailedReviews = scale?.detail_reviews_processed ?? kpis.detail_reviews_processed ?? 0;
+  const loadedProducts = products.length;
   const supplierRows = riskySuppliers.slice(0, 6).map((supplier) => ({
-    label: `${supplier.store} (${supplier.domain ?? "global"})`,
+    label: `${cleanText(supplier.store)} (${supplier.domain ?? "global"})`,
     value: supplier.supplier_negative_rate ?? 0,
     color: "#c75832"
   }));
@@ -1442,17 +1514,17 @@ function AnalyticsPage({
   return (
     <section className="grid">
       <div className="grid metrics">
-        <Metric icon={ShoppingBag} label="Avis charges" value={number(kpis.total_reviews)} />
+        <Metric icon={ShoppingBag} label="Avis analysés" value={number(kpis.total_reviews)} />
         <Metric icon={Target} label="Objectif minimum" value={number(minimumTotalTarget)} />
-        <Metric icon={PackageSearch} label="Produits analyses" value={number(kpis.total_products)} />
+        <Metric icon={PackageSearch} label="Produits analysés" value={number(kpis.total_products)} />
         <Metric icon={Store} label="Fournisseurs" value={number(kpis.total_suppliers)} />
-        <Metric icon={AlertTriangle} label="Taux negatif" value={pct(kpis.negative_rate_global)} />
+        <Metric icon={AlertTriangle} label="Taux négatif" value={pct(kpis.negative_rate_global)} />
       </div>
 
       <div className="grid two">
         <div className="panel">
           <div className="panel-header">
-            <h2>Repartition des sentiments</h2>
+            <h2>Répartition des sentiments</h2>
             <span className="pill">Pie chart</span>
           </div>
           <div className="panel-body">
@@ -1462,11 +1534,25 @@ function AnalyticsPage({
 
         <div className="panel">
           <div className="panel-header">
-            <h2>Tendance des avis</h2>
-            <span className="pill">Trend</span>
+            <h2>Portée des données</h2>
+            <span className="pill good">Global Gold</span>
           </div>
-          <div className="panel-body">
-            <TrendChart rows={trendRows} />
+          <div className="panel-body scope-list">
+            <div className="scope-item">
+              <span>Volume global consolidé</span>
+              <strong>{number(kpis.total_reviews)} avis</strong>
+              <small>Source : {kpis.data_source ?? "tables Gold"}</small>
+            </div>
+            <div className="scope-item">
+              <span>Produits Gold</span>
+              <strong>{number(kpis.total_products)} produits</strong>
+              <small>Total produit du projet, pas la limite d'affichage.</small>
+            </div>
+            <div className="scope-item">
+              <span>Avis détaillés matérialisés</span>
+              <strong>{number(detailedReviews)}</strong>
+              <small>Échantillon détaillé utilisé pour les pages produit et avis.</small>
+            </div>
           </div>
         </div>
       </div>
@@ -1477,16 +1563,30 @@ function AnalyticsPage({
             <h2>Volume par dataset</h2>
           </div>
           <div className="panel-body">
-            <BarList rows={domainRows} labelKey="domain" valueKey="reviews" />
+            <BarList
+              rows={domainRows.length ? domainRows : [{ domain: "Tous datasets", reviews: kpis.total_reviews }]}
+              labelKey="domain"
+              valueKey="reviews"
+            />
           </div>
         </div>
 
         <div className="panel">
           <div className="panel-header">
-            <h2>Scores moyens produit</h2>
+            <h2>Échantillon consultable</h2>
+            <span className="pill">Interface</span>
           </div>
-          <div className="panel-body">
-            <ScoreBars rows={scoreRows} />
+          <div className="panel-body scope-list">
+            <div className="scope-item">
+              <span>Produits chargés dans l'interface</span>
+              <strong>{number(loadedProducts)}</strong>
+              <small>Lot de navigation : meilleurs, intermédiaires et produits à risque.</small>
+            </div>
+            <div className="scope-item">
+              <span>Interprétation</span>
+              <strong>Ce n'est pas le total projet</strong>
+              <small>Le total fiable reste {number(kpis.total_products)} produits Gold.</small>
+            </div>
           </div>
         </div>
       </div>
@@ -1494,7 +1594,7 @@ function AnalyticsPage({
       <div className="grid two">
         <div className="panel">
           <div className="panel-header">
-            <h2>Risque par categorie</h2>
+            <h2>Risque par catégorie</h2>
           </div>
           <div className="panel-body">
             <BarList
@@ -1503,7 +1603,7 @@ function AnalyticsPage({
                 .sort((a, b) => b.risk_score - a.risk_score)
                 .slice(0, 10)
                 .map((category) => ({
-                  label: `${category.domain} - ${category.main_category}`,
+                  label: `${category.domain} - ${cleanText(category.main_category)}`,
                   value: category.risk_score
                 }))}
               labelKey="label"
@@ -1515,21 +1615,11 @@ function AnalyticsPage({
 
         <div className="panel">
           <div className="panel-header">
-            <h2>Decision produit</h2>
-            <span className="pill">Pie chart</span>
+            <h2>Fournisseurs à risque</h2>
           </div>
           <div className="panel-body">
-            <DonutChart centerLabel="produits" centerValue={number(products.length)} rows={decisionRows} />
+            <ScoreBars rows={supplierRows} />
           </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-header">
-          <h2>Fournisseurs a risque</h2>
-        </div>
-        <div className="panel-body">
-          <ScoreBars rows={supplierRows} />
         </div>
       </div>
     </section>
@@ -1565,8 +1655,8 @@ function ClientCataloguePage({
     <section className="grid">
       <div className="grid three">
         <Metric icon={CheckCircle2} label="Achetables" value={number(productSummary.achetable)} sub="Choix simples" />
-        <Metric icon={AlertTriangle} label="A surveiller" value={number(productSummary.watch)} sub="Lire les avis" />
-        <Metric icon={ShieldCheck} label="A eviter" value={number(productSummary.avoid)} sub="Risque client" />
+        <Metric icon={AlertTriangle} label="À surveiller" value={number(productSummary.watch)} sub="Lire les avis" />
+        <Metric icon={ShieldCheck} label="À éviter" value={number(productSummary.avoid)} sub="Risque client" />
       </div>
 
       <div className="toolbar">
@@ -1579,8 +1669,8 @@ function ClientCataloguePage({
           <select value={decisionFilter} onChange={(event) => setDecisionFilter(event.target.value as DecisionFilter)}>
             <option value="all">Tous</option>
             <option value="Achetable">Achetable</option>
-            <option value="A surveiller">A surveiller</option>
-            <option value="A eviter">A eviter</option>
+            <option value="A surveiller">À surveiller</option>
+            <option value="A eviter">À éviter</option>
           </select>
         </div>
         <div className="field">
@@ -1588,7 +1678,7 @@ function ClientCataloguePage({
           <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
             <option value="smart">Meilleur achat</option>
             <option value="future">Potentiel futur</option>
-            <option value="risk">Plus sur</option>
+            <option value="risk">Moins risqué</option>
             <option value="rating">Meilleure note</option>
             <option value="popular">Plus populaire</option>
           </select>
@@ -1621,9 +1711,9 @@ function ClientCataloguePage({
               <div className="visual-line" />
             </div>
             <div>
-              <div className="product-title">{product.title}</div>
+              <div className="product-title">{cleanText(product.title)}</div>
               <div className="muted">
-                {product.main_category} - {product.store}
+                {cleanText(product.main_category)} - {cleanText(product.store)}
               </div>
             </div>
             <div className="grid three">
@@ -1635,7 +1725,7 @@ function ClientCataloguePage({
             <div className="button-row">
               <button className="button" onClick={() => onSelectProduct(productKey(product), "client-product")} type="button">
                 <PackageSearch size={16} />
-                Detail
+                Détail
               </button>
               <button className="button secondary" onClick={() => onSelectProduct(productKey(product), "client-recommendations")} type="button">
                 <Target size={16} />
@@ -1665,7 +1755,7 @@ function ClientProductTable({ products, onSelect }: { products: Product[]; onSel
               <th>Note</th>
               <th>Confiance</th>
               <th>Avis positifs</th>
-              <th>Decision</th>
+              <th>Décision</th>
               <th></th>
             </tr>
           </thead>
@@ -1673,9 +1763,9 @@ function ClientProductTable({ products, onSelect }: { products: Product[]; onSel
             {products.map((product) => (
               <tr key={productKey(product)}>
                 <td>
-                  <div className="product-title">{product.title}</div>
+                  <div className="product-title">{cleanText(product.title)}</div>
                   <div className="muted">
-                    {product.domain} - {product.main_category} - {product.store}
+                    {product.domain} - {cleanText(product.main_category)} - {cleanText(product.store)}
                   </div>
                 </td>
                 <td>{number(product.avg_rating, 2)}</td>
@@ -1686,12 +1776,12 @@ function ClientProductTable({ products, onSelect }: { products: Product[]; onSel
                   <span className="pill good">{pct(product.positive_rate)}</span>
                 </td>
                 <td>
-                  <span className={decisionClass(decision(product))}>{decision(product)}</span>
+                  <span className={decisionClass(decision(product))}>{decisionLabel(decision(product))}</span>
                 </td>
                 <td>
                   <div className="button-row">
                     <button className="button secondary" onClick={() => onSelect(productKey(product), "client-product")} type="button">
-                      Detail
+                      Détail
                     </button>
                     <button className="button secondary" onClick={() => onSelect(productKey(product), "client-recommendations")} type="button">
                       Recos
@@ -1724,7 +1814,7 @@ function ProductPage({
     ? [
         { label: "Positifs", value: productDetail.positive_rate ?? 0 },
         { label: "Neutres", value: productDetail.neutral_rate ?? 0 },
-        { label: "Negatifs", value: productDetail.negative_rate ?? 0 }
+        { label: "Négatifs", value: productDetail.negative_rate ?? 0 }
       ]
     : [];
 
@@ -1737,13 +1827,13 @@ function ProductPage({
           <div className="grid">
             <div className="panel">
               <div className="panel-header">
-                <h2>{productDetail.title}</h2>
+                <h2>{cleanText(productDetail.title)}</h2>
                 <span className={confidenceClass(productDetail)}>{confidenceLabel(productDetail)}</span>
               </div>
               <div className="panel-body">
                 <div className="grid metrics">
-                  <Metric icon={Store} label="Fournisseur" value={productDetail.store ?? "-"} />
-                  <Metric icon={Target} label="Categorie" value={productDetail.main_category ?? "-"} />
+                  <Metric icon={Store} label="Fournisseur" value={cleanText(productDetail.store) || "-"} />
+                  <Metric icon={Target} label="Catégorie" value={cleanText(productDetail.main_category) || "-"} />
                   <Metric icon={Star} label="Note moyenne" value={number(productDetail.avg_rating, 2)} />
                   <Metric icon={ShoppingBag} label="Nombre d'avis" value={number(productDetail.nb_reviews)} />
                   <Metric icon={Brain} label="Sentiment global" value={productDetail.dominant_sentiment ?? "-"} />
@@ -1753,7 +1843,7 @@ function ProductPage({
 
             <div className="panel">
               <div className="panel-header">
-                <h2>Avis positifs / neutres / negatifs</h2>
+                <h2>Avis positifs / neutres / négatifs</h2>
               </div>
               <div className="panel-body">
                 <BarList rows={sentimentRows} labelKey="label" valueKey="value" formatter={pct} />
@@ -1795,13 +1885,13 @@ function RecommendationsPanel({ recommendations }: { recommendations: Recommenda
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>Produits similaires recommandes</h2>
+        <h2>Produits similaires recommandés</h2>
       </div>
       <div className="panel-body reviews">
         {recommendations.length ? (
           recommendations.map((recommendation) => (
             <div className="review" key={recommendation.recommended_product_id}>
-              <div className="product-title">{recommendation.recommended_title}</div>
+              <div className="product-title">{cleanText(recommendation.recommended_title)}</div>
               <div className="muted">
                 {recommendation.recommended_domain} - {recommendation.recommended_product_id}
               </div>
@@ -1837,14 +1927,14 @@ function SentimentPage({
           <textarea value={reviewText} onChange={(event) => setReviewText(event.target.value)} />
           <button className="button" onClick={() => predictSentiment()} type="button">
             <Brain size={16} />
-            Predire
+            Prédire
           </button>
         </div>
       </div>
 
       <div className="panel">
         <div className="panel-header">
-          <h2>Resultat</h2>
+          <h2>Résultat</h2>
         </div>
         <div className="panel-body">
           {sentiment ? (
@@ -1853,12 +1943,12 @@ function SentimentPage({
                 icon={ShieldCheck}
                 label="Sentiment"
                 value={sentiment.sentiment}
-                sub={predictionPct(sentiment.confidence) ? `Confiance estimee ${predictionPct(sentiment.confidence)}` : undefined}
+                sub={predictionPct(sentiment.confidence) ? `Confiance estimée ${predictionPct(sentiment.confidence)}` : undefined}
               />
               <div className="review">{sentiment.text}</div>
             </div>
           ) : (
-            <div className="empty">Aucune prediction pour le moment.</div>
+            <div className="empty">Aucune prédiction pour le moment.</div>
           )}
         </div>
       </div>
@@ -1888,11 +1978,11 @@ function SupplierDashboardPage({
           <div className="grid metrics">
             <Metric icon={PackageSearch} label="Produits" value={number(supplierDashboard.supplier.nb_products)} />
             <Metric icon={Star} label="Note moyenne" value={number(supplierDashboard.supplier.avg_supplier_rating, 2)} />
-            <Metric icon={AlertTriangle} label="Avis negatifs" value={pct(supplierDashboard.supplier.supplier_negative_rate)} />
+            <Metric icon={AlertTriangle} label="Avis négatifs" value={pct(supplierDashboard.supplier.supplier_negative_rate)} />
             <Metric icon={ShieldCheck} label="Score fournisseur" value={number(supplierDashboard.supplier.supplier_score, 2)} />
             <Metric
               icon={TrendingUp}
-              label="Produits a ameliorer"
+              label="Produits à améliorer"
               value={number(supplierDashboard.supplier.nb_problematic_products ?? supplierDashboard.problematic_products.length)}
             />
           </div>
@@ -1908,11 +1998,11 @@ function SupplierDashboardPage({
               onSelect={(id) => onSelectProduct(id, "client-product")}
               products={supplierDashboard.problematic_products}
               scoreKey="risk_score"
-              title="Produits a ameliorer"
+              title="Produits à améliorer"
             />
           </div>
 
-          <ReviewsList reviews={supplierDashboard.negative_reviews ?? []} title="Avis negatifs recents" />
+          <ReviewsList reviews={supplierDashboard.negative_reviews ?? []} title="Avis négatifs récents" />
         </>
       ) : (
         <div className="empty">Fournisseur introuvable.</div>
@@ -1961,7 +2051,7 @@ function SupplierNegativePage({
   return (
     <section className="grid">
       <SupplierSelect suppliers={suppliers} selectedSupplierId={selectedSupplierId} setSelectedSupplierId={setSelectedSupplierId} />
-      <ReviewsList reviews={reviews} title="Avis negatifs recents" />
+      <ReviewsList reviews={reviews} title="Avis négatifs récents" />
     </section>
   );
 }
@@ -1980,18 +2070,21 @@ function SupplierActionsPage({
   reviews: Review[];
 }) {
   const hasSizeIssue = reviews.some((review) => review.text.toLowerCase().includes("taille"));
-  const hasQualityIssue = reviews.some((review) => review.text.toLowerCase().includes("qualite"));
+  const hasQualityIssue = reviews.some((review) => {
+    const text = review.text.toLowerCase();
+    return text.includes("qualite") || text.includes("qualité");
+  });
   const hasDeliveryIssue = reviews.some((review) => review.text.toLowerCase().includes("livraison"));
   const actions = [
     hasSizeIssue
-      ? "Beaucoup d'avis negatifs mentionnent la taille. Action : verifier la description des tailles du produit."
-      : "Verifier que les titres et descriptions donnent assez de contexte avant l'achat.",
+      ? "Beaucoup d'avis négatifs mentionnent la taille. Action : vérifier la description des tailles du produit."
+      : "Vérifier que les titres et descriptions donnent assez de contexte avant l'achat.",
     hasQualityIssue
-      ? "Des avis mentionnent la qualite. Action : controler les materiaux, photos et attentes client."
+      ? "Des avis mentionnent la qualité. Action : contrôler les matériaux, photos et attentes client."
       : "Surveiller les produits dont la confiance descend sous le niveau moyen.",
     hasDeliveryIssue
-      ? "Des avis mentionnent la livraison. Action : revoir la promesse logistique ou les informations de delai."
-      : "Comparer les produits a ameliorer avec les meilleurs produits du meme fournisseur."
+      ? "Des avis mentionnent la livraison. Action : revoir la promesse logistique ou les informations de délai."
+      : "Comparer les produits à améliorer avec les meilleurs produits du même fournisseur."
   ];
 
   return (
@@ -2000,7 +2093,7 @@ function SupplierActionsPage({
       <div className="grid two">
         <div className="panel">
           <div className="panel-header">
-            <h2>Actions recommandees</h2>
+            <h2>Actions recommandées</h2>
           </div>
           <div className="panel-body reviews">
             {actions.map((action) => (
@@ -2029,13 +2122,7 @@ function DataMlPage({
   apiHealth: ApiHealth | null;
   categories: CategoryKpi[];
   dataQualityReport: DataQualityReport | null;
-  kpis: {
-    total_reviews: number;
-    total_products: number;
-    total_suppliers: number;
-    total_categories: number;
-    average_rating_global: number;
-  };
+  kpis: DashboardKpis;
   onRunPipeline: () => void;
   pipelineLoading: boolean;
   pipelineResult: PipelineRunResult | null;
@@ -2050,9 +2137,9 @@ function DataMlPage({
   return (
     <section className="grid">
       <div className="grid metrics">
-        <Metric icon={ShoppingBag} label="Lignes avis traitees" value={number(kpis.total_reviews)} />
+        <Metric icon={ShoppingBag} label="Avis traités" value={number(kpis.total_reviews)} />
         <Metric icon={PackageSearch} label="Produits Gold" value={number(kpis.total_products)} />
-        <Metric icon={Target} label="Categories Gold" value={number(kpis.total_categories)} />
+        <Metric icon={Target} label="Catégories Gold" value={number(kpis.total_categories)} />
         <Metric icon={CheckCircle2} label="Source API" value={apiHealth?.data_source?.active ?? "auto"} />
         <Metric
           icon={scaleReady ? CheckCircle2 : AlertTriangle}
@@ -2072,7 +2159,7 @@ function DataMlPage({
         <div className="panel-body timeline">
           <div className="review">Objectif : chaque dataset actif doit contenir entre 1 500 000 et 5 000 000 avis.</div>
           <div className="review">
-            Le total attendu depend du nombre de datasets actifs : {number(minReviewsPerDataset)} avis minimum par dataset.
+            Le total attendu dépend du nombre de datasets actifs : {number(minReviewsPerDataset)} avis minimum par dataset.
           </div>
           <div className="review">{scale?.message ?? "Rapport de volume indisponible."}</div>
           {Object.entries(reviewsByDataset).map(([domain, count]) => (
@@ -2090,32 +2177,32 @@ function DataMlPage({
             <h2>Pipeline Bronze / Silver / Gold</h2>
             <button className="button" disabled={pipelineLoading} onClick={onRunPipeline} type="button">
               <RefreshCw size={16} />
-              {pipelineLoading ? "Entrainement..." : "Relancer ETL + ML"}
+              {pipelineLoading ? "Entraînement..." : "Relancer ETL + ML"}
             </button>
           </div>
           <div className="panel-body timeline">
-            <div className="review">Bronze : reviews + metadata par categorie.</div>
+            <div className="review">Bronze : reviews + metadata par catégorie.</div>
             <div className="review">Silver : reviews_clean et products_clean avec domain, global_product_id, supplier_id.</div>
             <div className="review">Gold : product_kpis, supplier_kpis, category_kpis, recommendations.</div>
-            <div className="review">API : FastAPI expose uniquement les tables Gold et les predictions.</div>
+            <div className="review">API : FastAPI expose uniquement les tables Gold et les prédictions.</div>
           </div>
         </div>
 
         <div className="panel">
           <div className="panel-header">
-            <h2>Audit live du systeme</h2>
+            <h2>Audit live du système</h2>
           </div>
           <div className="panel-body reviews">
             <div className="review">Modele sentiment : TF-IDF + comparaison baseline / Naive Bayes / Logistic Regression.</div>
-            <div className="review">Recommandation : similarite texte + confiance + popularite.</div>
-            <div className="review">Produits filtres actuellement : {number(products.length)}</div>
+            <div className="review">Recommandation : similarité texte + confiance + popularité.</div>
+            <div className="review">Produits consultables chargés : {number(products.length)}</div>
             {pipelineResult ? (
               <div className="review">
                 Dernier run : {pipelineResult.quality_status}, {number(pipelineResult.reviews)} avis,{" "}
-                {number(pipelineResult.products)} produits, modele {pipelineResult.model?.best_model}.
+                {number(pipelineResult.products)} produits, modèle {pipelineResult.model?.best_model}.
               </div>
             ) : (
-              <div className="review">Aucun run lance depuis cette interface.</div>
+              <div className="review">Aucun run lancé depuis cette interface.</div>
             )}
           </div>
         </div>
@@ -2123,12 +2210,12 @@ function DataMlPage({
 
       <div className="panel">
         <div className="panel-header">
-          <h2>Performance categories</h2>
+          <h2>Performance catégories</h2>
         </div>
         <div className="panel-body">
           <BarList
             rows={categories.map((category) => ({
-              label: `${category.domain} - ${category.main_category}`,
+              label: `${category.domain} - ${cleanText(category.main_category)}`,
               value: category.category_score
             }))}
             labelKey="label"
@@ -2138,6 +2225,103 @@ function DataMlPage({
         </div>
       </div>
     </section>
+  );
+}
+
+function MiniAssistant({
+  dashboard,
+  products,
+  selectedProduct,
+  onSelectProduct,
+  open,
+  setOpen
+}: {
+  dashboard: AdminDashboard | null;
+  products: Product[];
+  selectedProduct: Product | null;
+  onSelectProduct: (id: string, target?: View) => void;
+  open: boolean;
+  setOpen: (value: boolean) => void;
+}) {
+  const quickQuestions = [
+    "Quel produit acheter ?",
+    "Quel produit éviter ?",
+    "Quel fournisseur surveiller ?",
+    "Comment lire les scores ?"
+  ];
+  const [question, setQuestion] = useState(quickQuestions[0]);
+  const answer = useMemo(
+    () => buildBotAnswer(question, products, dashboard, selectedProduct),
+    [dashboard, products, question, selectedProduct]
+  );
+
+  return (
+    <div className="ai-assistant">
+      {open ? (
+        <div className="ai-panel">
+          <div className="ai-header">
+            <div>
+              <strong>Assistant IA</strong>
+              <span>Conseil produit et fournisseur</span>
+            </div>
+            <button className="button secondary compact" onClick={() => setOpen(false)} type="button">
+              Fermer
+            </button>
+          </div>
+
+          <div className="bot-message bot">
+            <Lightbulb size={18} />
+            <div>
+              <strong>{answer.title}</strong>
+              <p>{answer.text}</p>
+            </div>
+          </div>
+
+          {answer.products.length ? (
+            <div className="mini-products">
+              {answer.products.slice(0, 2).map((product) => (
+                <button
+                  className="mini-product"
+                  key={productKey(product)}
+                  onClick={() => {
+                    onSelectProduct(productKey(product), "client-product");
+                    setOpen(false);
+                  }}
+                  type="button"
+                >
+                  <span className={decisionClass(decision(product))}>{decisionLabel(decision(product))}</span>
+                  <strong>{cleanText(product.title)}</strong>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="guide-input">
+            <input
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Pose une question courte..."
+            />
+            <button className="button" onClick={() => setQuestion(question.trim() || quickQuestions[0])} type="button">
+              <Send size={16} />
+            </button>
+          </div>
+
+          <div className="quick-questions">
+            {quickQuestions.map((item) => (
+              <button className="button secondary compact" key={item} onClick={() => setQuestion(item)} type="button">
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <button className="ai-toggle" onClick={() => setOpen(!open)} type="button">
+        <Bot size={20} />
+        Assistant IA
+      </button>
+    </div>
   );
 }
 
@@ -2157,12 +2341,12 @@ function GuidePage({
       <GuideBot dashboard={dashboard} products={products} selectedProduct={selectedProduct} onSelectProduct={onSelectProduct} />
       <div className="panel guide-rules">
         <div className="panel-header">
-          <h2>Relation logique du systeme</h2>
+          <h2>Relation logique du système</h2>
         </div>
         <div className="panel-body timeline">
           <div className="review">Avis client &rarr; analyse de sentiment.</div>
           <div className="review">Sentiment &rarr; scores produit : confiance, risque, achetable.</div>
-          <div className="review">Scores produit &rarr; scores fournisseur et categories.</div>
+          <div className="review">Scores produit &rarr; scores fournisseur et catégories.</div>
           <div className="review">Gold data &rarr; dashboards client, fournisseur et administrateur.</div>
           <div className="review">Recommandation_score &rarr; produits similaires proposes au client.</div>
         </div>
@@ -2200,29 +2384,37 @@ function TechnicalProductTable({
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => (
-              <tr key={productKey(product)}>
-                <td>
-                  <div className="product-title">{productLabel(product)}</div>
-                  <div className="muted">
-                    {product.domain} - {product.store}
-                  </div>
-                </td>
-                <td>{number(product.avg_rating, 2)}</td>
-                <td>{riskLevel(product)}</td>
-                <td>
-                  <span className={confidenceClass(product)}>{confidenceLabel(product)}</span>
-                </td>
-                <td>{number(product[scoreKey], 2)}</td>
-                {onSelect ? (
+            {products.length ? (
+              products.map((product) => (
+                <tr key={productKey(product)}>
                   <td>
-                    <button className="button secondary" onClick={() => onSelect(productKey(product))} type="button">
-                      Voir
-                    </button>
+                    <div className="product-title">{cleanText(productLabel(product))}</div>
+                    <div className="muted">
+                      {product.domain} - {cleanText(product.store)}
+                    </div>
                   </td>
-                ) : null}
+                  <td>{number(product.avg_rating, 2)}</td>
+                  <td>{riskLevel(product)}</td>
+                  <td>
+                    <span className={confidenceClass(product)}>{confidenceLabel(product)}</span>
+                  </td>
+                  <td>{number(product[scoreKey], 2)}</td>
+                  {onSelect ? (
+                    <td>
+                      <button className="button secondary" onClick={() => onSelect(productKey(product))} type="button">
+                        Voir
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="table-empty" colSpan={onSelect ? 6 : 5}>
+                  Aucun produit exploitable pour ce fournisseur dans l'export actuel.
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
@@ -2234,7 +2426,7 @@ function RiskySuppliersTable({ suppliers }: { suppliers: Supplier[] }) {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>Fournisseurs a risque</h2>
+        <h2>Fournisseurs à risque</h2>
       </div>
       <div className="table-wrap">
         <table>
@@ -2243,14 +2435,14 @@ function RiskySuppliersTable({ suppliers }: { suppliers: Supplier[] }) {
               <th>Fournisseur</th>
               <th>Domaine</th>
               <th>Produits</th>
-              <th>Avis negatifs</th>
-              <th>Produits a risque</th>
+              <th>Avis négatifs</th>
+              <th>Produits à risque</th>
             </tr>
           </thead>
           <tbody>
             {suppliers.map((supplier) => (
               <tr key={`${supplier.supplier_id}-${supplier.domain}`}>
-                <td>{supplier.store}</td>
+                <td>{cleanText(supplier.store)}</td>
                 <td>{supplier.domain}</td>
                 <td>{number(supplier.nb_products)}</td>
                 <td>{pct(supplier.supplier_negative_rate)}</td>
@@ -2264,7 +2456,7 @@ function RiskySuppliersTable({ suppliers }: { suppliers: Supplier[] }) {
   );
 }
 
-function ReviewsList({ reviews, title = "Avis recents" }: { reviews: Review[]; title?: string }) {
+function ReviewsList({ reviews, title = "Avis récents" }: { reviews: Review[]; title?: string }) {
   return (
     <div className="panel">
       <div className="panel-header">
@@ -2276,10 +2468,10 @@ function ReviewsList({ reviews, title = "Avis recents" }: { reviews: Review[]; t
             <div className="review" key={review.review_id}>
               <strong>{number(review.rating, 1)} / 5</strong>{" "}
               <span className={sentimentClass(review.sentiment)}>{review.sentiment}</span>
-              <p>{review.text}</p>
+              <p>{cleanText(review.text)}</p>
               <div className="muted">
-                {review.product_title ? `${review.product_title} - ` : ""}
-                {review.verified_purchase ? "Achat verifie" : "Achat non verifie"}
+                {review.product_title ? `${cleanText(review.product_title)} - ` : ""}
+                {review.verified_purchase ? "Achat vérifié" : "Achat non vérifié"}
               </div>
             </div>
           ))
@@ -2304,7 +2496,7 @@ function GuideBot({
 }) {
   const quickQuestions = [
     "Quel produit acheter ?",
-    "Quel produit eviter ?",
+    "Quel produit éviter ?",
     "Quel produit peut marcher dans le futur ?",
     "Comment lire les scores ?",
     "Quel fournisseur est fiable ?"
@@ -2346,7 +2538,7 @@ function GuideBot({
                 key={productKey(product)}
                 onClick={() => onSelectProduct(productKey(product), "client-product")}
               >
-                <span className={decisionClass(decision(product))}>{decision(product)}</span>
+                <span className={decisionClass(decision(product))}>{decisionLabel(decision(product))}</span>
                 <strong>{product.title}</strong>
                 <span className="muted">
                   {product.domain} - Confiance {confidenceLabel(product)} - Futur {pct(futurePotential(product))}
@@ -2360,7 +2552,7 @@ function GuideBot({
           <input
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Pose une question : quel produit acheter, eviter, comparer..."
+            placeholder="Pose une question : quel produit acheter, éviter, comparer..."
           />
           <button className="button" onClick={() => askBot()} type="button">
             <Bot size={16} />
@@ -2401,21 +2593,21 @@ function buildBotAnswer(
   if (normalized.includes("futur") || normalized.includes("avenir") || normalized.includes("marcher")) {
     return {
       question: rawQuestion,
-      title: "Prediction d'achat futur",
+      title: "Prédiction d'achat futur",
       text: future
-        ? `${future.title} a le meilleur potentiel futur : ${pct(futurePotential(future))}. Le systeme combine popularite, avis positifs et confiance.`
-        : "Je n'ai pas encore assez de donnees produit.",
+        ? `${cleanText(future.title)} a le meilleur potentiel futur : ${pct(futurePotential(future))}. Le système combine popularité, avis positifs et confiance.`
+        : "Je n'ai pas encore assez de données produit.",
       products: future ? rankedByFuture.slice(0, 3) : []
     };
   }
 
-  if (normalized.includes("eviter") || normalized.includes("risque") || normalized.includes("mauvais")) {
+  if (normalized.includes("eviter") || normalized.includes("éviter") || normalized.includes("risque") || normalized.includes("mauvais")) {
     return {
       question: rawQuestion,
-      title: "Produit a eviter ou surveiller",
+      title: "Produit à éviter ou surveiller",
       text: risky
-        ? `${risky.title} ressort comme produit a surveiller. Raison : ${explainProduct(risky)}`
-        : "Je n'ai pas encore assez de donnees produit.",
+        ? `${cleanText(risky.title)} ressort comme produit à surveiller. Raison : ${explainProduct(risky)}`
+        : "Je n'ai pas encore assez de données produit.",
       products: risky ? rankedByRisk.slice(0, 3) : []
     };
   }
@@ -2423,9 +2615,9 @@ function buildBotAnswer(
   if (normalized.includes("score") || normalized.includes("comprendre") || normalized.includes("difference")) {
     return {
       question: rawQuestion,
-      title: "Comment le systeme decide",
+      title: "Comment le système décide",
       text:
-        "Le client voit une confiance lisible. L'admin et Data & ML voient les scores techniques : sentiment, risque, popularite, fournisseur et recommandation.",
+        "Le client voit une confiance lisible. L'admin et Data & ML voient les scores techniques : sentiment, risque, popularité, fournisseur et recommandation.",
       products: selectedProduct ? [selectedProduct] : rankedByBuy.slice(0, 2)
     };
   }
@@ -2435,8 +2627,8 @@ function buildBotAnswer(
       question: rawQuestion,
       title: "Fournisseur le plus fiable",
       text: supplier
-        ? `${supplier.store} est bien classe actuellement : note moyenne, volume d'avis et faible taux negatif.`
-        : "Je n'ai pas encore assez de donnees fournisseur.",
+        ? `${cleanText(supplier.store)} est bien classé actuellement : note moyenne, volume d'avis et faible taux négatif.`
+        : "Je n'ai pas encore assez de données fournisseur.",
       products: rankedByBuy
         .filter((product) => product.store === supplier?.store && (!supplier?.domain || product.domain === supplier.domain))
         .slice(0, 3)
@@ -2447,8 +2639,8 @@ function buildBotAnswer(
     question: rawQuestion,
     title: "Meilleur choix conseille",
     text: best
-      ? `${best.title} est le meilleur choix actuel. Decision : ${decision(best)}. ${explainProduct(best)}`
-      : "Je n'ai pas encore assez de donnees produit.",
+      ? `${cleanText(best.title)} est le meilleur choix actuel. Décision : ${decisionLabel(decision(best))}. ${explainProduct(best)}`
+      : "Je n'ai pas encore assez de données produit.",
     products: best ? rankedByBuy.slice(0, 3) : []
   };
 }

@@ -64,6 +64,12 @@ def test_sentiment_business_rules():
     assert negative_payload["sentiment"] == "negatif"
     assert negative_payload["confidence"] < 1
 
+    size_issue = client.post("/sentiment/predict", json={"text": "Produit de mauvaise qualite, taille trop grand."})
+    assert size_issue.status_code == 200
+    size_payload = size_issue.json()
+    assert size_payload["sentiment"] == "negatif"
+    assert size_payload["confidence"] < 1
+
     positive = client.post("/sentiment/predict", json={"text": "Produit de bonne qualite, excellent et recommande."})
     assert positive.status_code == 200
     positive_payload = positive.json()
