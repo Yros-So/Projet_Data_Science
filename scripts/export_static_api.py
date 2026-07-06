@@ -51,8 +51,22 @@ def main() -> None:
     global_kpis = read_json(GOLD_GLOBAL_KPIS_PATH)
     data_quality_report = read_json(GOLD_DATA_QUALITY_REPORT_PATH)
 
+    negative_review_product_ids = set(
+        reviews_sample[
+            reviews_sample.get("sentiment", pd.Series(dtype=str)).astype(str).str.lower() == "negatif"
+        ]
+        .get("global_product_id", pd.Series(dtype=str))
+        .dropna()
+        .astype(str)
+    )
+    negative_review_products = products[products["global_product_id"].astype(str).isin(negative_review_product_ids)]
+    negative_review_product_kpis = product_kpis[
+        product_kpis["global_product_id"].astype(str).isin(negative_review_product_ids)
+    ]
+
     product_sample = pd.concat(
         [
+            negative_review_products,
             top_frame(products, ["buyability_score", "popularity_score"], 1200),
             top_frame(products, ["risk_score", "nb_reviews"], 500),
             top_frame(products, ["popularity_score"], 500),
@@ -61,6 +75,7 @@ def main() -> None:
     ).drop_duplicates(subset=["global_product_id"]).head(2000)
 
     supplier_ids = set(product_sample.get("supplier_id", pd.Series(dtype=str)).dropna().astype(str))
+    supplier_ids.update(negative_review_product_kpis.get("supplier_id", pd.Series(dtype=str)).dropna().astype(str))
     supplier_sample = pd.concat(
         [
             suppliers[suppliers["supplier_id"].astype(str).isin(supplier_ids)],
@@ -100,15 +115,33 @@ def main() -> None:
         "sorts": ["popularite", "note", "confiance", "achetable", "futur", "risque"],
     }
 
+    product_kpi_sample = product_kpis[
+        product_kpis["global_product_id"].astype(str).isin(product_sample["global_product_id"].astype(str))
+        | product_kpis["supplier_id"].astype(str).isin(supplier_sample["supplier_id"].astype(str))
+    ].drop_duplicates(subset=["global_product_id"]).head(10_000)
+
+    reviews_export = pd.concat(
+        [
+            reviews_sample[
+                reviews_sample.get("global_product_id", pd.Series(dtype=str))
+                .astype(str)
+                .isin(product_kpi_sample["global_product_id"].astype(str))
+            ],
+            reviews_sample[reviews_sample.get("sentiment", pd.Series(dtype=str)).astype(str).str.lower() == "negatif"],
+            reviews_sample,
+        ],
+        ignore_index=True,
+    ).drop_duplicates(subset=["review_id"]).head(2_000)
+
     write_json(OUTPUT_DIR / "health.json", {"status": "ok", "data_source": {"configured": "static", "active": "static", "postgres_ready": False}})
     write_json(OUTPUT_DIR / "dashboard.json", dashboard)
     write_json(OUTPUT_DIR / "filters.json", filter_options)
     write_json(OUTPUT_DIR / "products.json", to_json_records(product_sample))
-    write_json(OUTPUT_DIR / "product_kpis.json", to_json_records(product_kpis[product_kpis["global_product_id"].isin(product_sample["global_product_id"])]))
+    write_json(OUTPUT_DIR / "product_kpis.json", to_json_records(product_kpi_sample))
     write_json(OUTPUT_DIR / "suppliers.json", to_json_records(supplier_sample))
     write_json(OUTPUT_DIR / "categories.json", to_json_records(category_sample))
     write_json(OUTPUT_DIR / "recommendations.json", to_json_records(recommendations.head(10_000)))
-    write_json(OUTPUT_DIR / "reviews_sample.json", to_json_records(reviews_sample))
+    write_json(OUTPUT_DIR / "reviews_sample.json", to_json_records(reviews_export))
     print(f"Static API exported to {OUTPUT_DIR}")
 
 

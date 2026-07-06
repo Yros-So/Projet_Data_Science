@@ -11,6 +11,7 @@ from backend.config import (
     SILVER_REVIEWS_PATH,
     ensure_project_dirs,
 )
+from backend.ml.sentiment_rules import apply_sentiment_rules
 from backend.etl.etl_spark import run_etl
 from backend.storage import read_table
 
@@ -154,13 +155,13 @@ def load_sentiment_model():
 
 def predict_sentiment(text: str) -> dict[str, object]:
     model = load_sentiment_model()
-    prediction = model.predict([text])[0]
+    prediction = str(model.predict([text])[0])
     score = None
     if hasattr(model, "predict_proba"):
         probabilities = model.predict_proba([text])[0]
         classes = list(model.classes_)
         score = float(probabilities[classes.index(prediction)])
-    return {"text": text, "sentiment": prediction, "confidence": score}
+    return apply_sentiment_rules(text, prediction, score)
 
 
 if __name__ == "__main__":

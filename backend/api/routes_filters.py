@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 from fastapi import APIRouter
 
 from backend.api.data_access import table
@@ -17,22 +18,23 @@ def _unique_values(dataframe, column: str, limit: int = 500) -> list:
 
 @router.get("/options")
 def filter_options():
-    products = table("products")
     product_kpis = table("product_kpis")
 
-    years = set()
+    years = []
     if {"min_review_year", "max_review_year"}.issubset(product_kpis.columns):
-        for _, row in product_kpis[["min_review_year", "max_review_year"]].dropna().iterrows():
-            years.update(range(int(row["min_review_year"]), int(row["max_review_year"]) + 1))
+        min_year = pd.to_numeric(product_kpis["min_review_year"], errors="coerce").dropna()
+        max_year = pd.to_numeric(product_kpis["max_review_year"], errors="coerce").dropna()
+        if not min_year.empty and not max_year.empty:
+            years = list(range(int(min_year.min()), int(max_year.max()) + 1))
 
     return {
-        "domains": _unique_values(products, "domain"),
-        "categories": _unique_values(products, "main_category"),
-        "category_ids": _unique_values(products, "category_id"),
-        "suppliers": _unique_values(products, "store"),
-        "supplier_ids": _unique_values(products, "supplier_id"),
+        "domains": _unique_values(product_kpis, "domain"),
+        "categories": _unique_values(product_kpis, "main_category"),
+        "category_ids": _unique_values(product_kpis, "category_id"),
+        "suppliers": _unique_values(product_kpis, "store"),
+        "supplier_ids": _unique_values(product_kpis, "supplier_id"),
         "sentiments": ["positif", "neutre", "negatif"],
         "risk_levels": ["faible", "moyen", "eleve"],
-        "years": sorted(years),
+        "years": years,
         "sorts": ["popularite", "note", "confiance", "achetable", "futur", "risque"],
     }

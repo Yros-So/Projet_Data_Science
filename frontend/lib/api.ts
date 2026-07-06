@@ -1,6 +1,7 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
 const STATIC_API_ENABLED = process.env.NEXT_PUBLIC_STATIC_API === "true";
 const STATIC_API_ROOT = "/static-api";
+const MAX_PREDICTION_CONFIDENCE = 0.99;
 
 export type GlobalKpis = {
   total_reviews: number;
@@ -209,6 +210,13 @@ function riskLevel(score?: number | null): string {
   return "eleve";
 }
 
+function capPredictionConfidence(value: number | null | undefined): number | null {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return null;
+  }
+  return Math.max(0, Math.min(MAX_PREDICTION_CONFIDENCE, value));
+}
+
 async function staticJson<T>(file: string): Promise<T> {
   if (!staticCache.has(file)) {
     staticCache.set(
@@ -279,19 +287,35 @@ function filterProducts(products: Product[], url: URL): Product[] {
   };
   const column = sortColumns[sortBy] ?? "popularity_score";
   const direction = sortOrder === "asc" ? 1 : -1;
-  return [...filtered].sort((a, b) => Number(a[column] ?? 0) > Number(b[column] ?? 0) ? direction : -direction);
+  return [...filtered].sort((a, b) => (Number(a[column] ?? 0) - Number(b[column] ?? 0)) * direction);
 }
 
 function filterSuppliers(suppliers: Supplier[], url: URL): Supplier[] {
   const domain = normalize(url.searchParams.get("domain"));
   const risk = normalize(url.searchParams.get("risk"));
+  const sortBy = normalize(url.searchParams.get("sort_by") ?? "score");
+  const sortOrder = normalize(url.searchParams.get("sort_order") ?? "desc");
+  const sortColumns: Record<string, keyof Supplier> = {
+    score: "supplier_score",
+    risque: "supplier_negative_rate",
+    risk: "supplier_negative_rate",
+    avis_negatifs: "supplier_negative_rate",
+    negative: "supplier_negative_rate",
+    produits_problematiques: "nb_problematic_products",
+    note: "avg_supplier_rating",
+    rating: "avg_supplier_rating",
+    avis: "nb_reviews",
+    reviews: "nb_reviews"
+  };
+  const column = sortColumns[sortBy] ?? "supplier_score";
+  const direction = sortOrder === "asc" ? 1 : -1;
   return suppliers
     .filter(
       (supplier) =>
         (!domain || domain === "all" || normalize(supplier.domain) === domain) &&
         (!risk || risk === "all" || riskLevel(supplier.supplier_negative_rate) === risk)
     )
-    .sort((a, b) => (b.supplier_score ?? 0) - (a.supplier_score ?? 0))
+    .sort((a, b) => (Number(a[column] ?? 0) - Number(b[column] ?? 0)) * direction)
     .slice(0, limitFrom(url, 25));
 }
 
@@ -316,6 +340,32 @@ function recommendationFallback(rows: Recommendation[], productId: string, limit
   const domain = productId.split("_", 1)[0];
   const domainRows = rows.filter((row) => row.domain === domain).slice(0, limit);
   return domainRows.length ? domainRows : rows.slice(0, limit);
+}
+
+function negativeReviewsForSupplier(
+  reviews: Review[],
+  products: ProductKpi[],
+  suppliers: Supplier[],
+  supplierId: string,
+  limit: number
+): Review[] {
+  const supplier = suppliers.find((item) => item.supplier_id === supplierId);
+  const supplierProducts = products.filter((product) => product.supplier_id === supplierId);
+  const productIds = new Set(supplierProducts.map((product) => product.global_product_id));
+  const supplierStore = normalize(supplier?.store);
+  const supplierDomain = normalize(supplier?.domain);
+
+  return reviews
+    .filter((review) => {
+      if (normalize(review.sentiment) !== "negatif") {
+        return false;
+      }
+      const productMatch = review.global_product_id ? productIds.has(review.global_product_id) : false;
+      const storeMatch = supplierStore && normalize((review as Review & { store?: string }).store) === supplierStore;
+      const domainMatch = !supplierDomain || normalize(review.domain) === supplierDomain;
+      return productMatch || Boolean(storeMatch && domainMatch);
+    })
+    .slice(0, limit);
 }
 
 async function staticApiGet<T>(path: string): Promise<T> {
@@ -370,29 +420,115 @@ async function staticApiGet<T>(path: string): Promise<T> {
     const supplierId = decodeURIComponent(pathname.replace("/suppliers/", "").replace("/dashboard", ""));
     const suppliers = await staticJson<Supplier[]>("suppliers.json");
     const products = await staticJson<ProductKpi[]>("product_kpis.json");
+    const reviews = await staticJson<Review[]>("reviews_sample.json");
     const supplier = suppliers.find((item) => item.supplier_id === supplierId) ?? suppliers[0];
     const supplierProducts = products.filter((product) => product.supplier_id === supplier?.supplier_id);
     return {
       supplier,
       top_products: [...supplierProducts].sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0)).slice(0, 5),
       problematic_products: [...supplierProducts].sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0)).slice(0, 5),
-      negative_reviews: []
+      negative_reviews: supplier ? negativeReviewsForSupplier(reviews, products, suppliers, supplier.supplier_id, 10) : []
     } as T;
   }
+  if (pathname.startsWith("/suppliers/") && pathname.endsWith("/products")) {
+    const supplierId = decodeURIComponent(pathname.replace("/suppliers/", "").replace("/products", ""));
+    const products = await staticJson<ProductKpi[]>("product_kpis.json");
+    return products
+      .filter((product) => product.supplier_id === supplierId)
+      .sort((a, b) => (b.popularity_score ?? 0) - (a.popularity_score ?? 0))
+      .slice(0, limitFrom(url, 25)) as T;
+  }
+  if (pathname.startsWith("/suppliers/") && pathname.endsWith("/problematic-products")) {
+    const supplierId = decodeURIComponent(pathname.replace("/suppliers/", "").replace("/problematic-products", ""));
+    const products = await staticJson<ProductKpi[]>("product_kpis.json");
+    return products
+      .filter((product) => product.supplier_id === supplierId)
+      .sort((a, b) => (b.risk_score ?? 0) - (a.risk_score ?? 0))
+      .slice(0, limitFrom(url, 10)) as T;
+  }
   if (pathname.startsWith("/suppliers/") && pathname.endsWith("/negative-reviews")) {
-    return [] as T;
+    const supplierId = decodeURIComponent(pathname.replace("/suppliers/", "").replace("/negative-reviews", ""));
+    const [reviews, products, suppliers] = await Promise.all([
+      staticJson<Review[]>("reviews_sample.json"),
+      staticJson<ProductKpi[]>("product_kpis.json"),
+      staticJson<Supplier[]>("suppliers.json")
+    ]);
+    return negativeReviewsForSupplier(reviews, products, suppliers, supplierId, limitFrom(url, 10)) as T;
   }
   throw new Error(`Route statique non disponible: ${path}`);
 }
 
 function predictStaticSentiment(text: string): SentimentResult {
   const normalized = normalize(text);
-  const negativeWords = ["mauvais", "decu", "cass", "pauvre", "poor", "bad", "negative", "qualite faible"];
-  const positiveWords = ["excellent", "incroyable", "bon", "bonne", "great", "recommend", "satisfait", "qualite"];
-  const negative = negativeWords.some((word) => normalized.includes(word));
-  const positive = positiveWords.some((word) => normalized.includes(word));
-  const sentiment = negative && !positive ? "negatif" : positive && !negative ? "positif" : "neutre";
-  return { text, sentiment, confidence: sentiment === "neutre" ? 0.62 : 0.78 };
+  const negativeWords = [
+    "mauvais",
+    "mauvaise",
+    "mauvaise qualite",
+    "qualite faible",
+    "qualite mediocre",
+    "pas bon",
+    "pas bonne",
+    "pas recommande",
+    "ne recommande pas",
+    "nul",
+    "nulle",
+    "cass",
+    "defectueux",
+    "abime",
+    "decu",
+    "decevant",
+    "trop petit",
+    "trop petite",
+    "ne fonctionne pas",
+    "poor",
+    "bad",
+    "broken",
+    "defective",
+    "disappointed",
+    "not good",
+    "not recommend",
+    "terrible",
+    "awful",
+    "waste",
+    "low quality",
+    "does not work",
+    "doesnt work"
+  ];
+  const positiveWords = [
+    "excellent",
+    "tres bon",
+    "tres bonne",
+    "bon produit",
+    "bonne qualite",
+    "satisfait",
+    "satisfaite",
+    "je recommande",
+    "recommande",
+    "parfait",
+    "parfaite",
+    "super",
+    "great",
+    "good quality",
+    "very good",
+    "perfect",
+    "love"
+  ];
+  const neutralWords = ["correct", "moyen", "moyenne", "sans plus", "ok", "acceptable", "average", "neutral"];
+  const negativeHits = negativeWords.filter((word) => normalized.includes(word)).length;
+  const positiveHits = positiveWords.filter((word) => normalized.includes(word)).length;
+  const neutralHits = neutralWords.filter((word) => normalized.includes(word)).length;
+  const sentiment =
+    negativeHits > positiveHits
+      ? "negatif"
+      : positiveHits > negativeHits
+        ? "positif"
+        : negativeHits && positiveHits
+          ? "negatif"
+          : neutralHits
+            ? "neutre"
+            : "neutre";
+  const confidence = sentiment === "neutre" ? 0.66 : sentiment === "negatif" ? 0.86 : 0.84;
+  return { text, sentiment, confidence: capPredictionConfidence(confidence) };
 }
 
 export async function apiGet<T>(path: string): Promise<T> {

@@ -53,3 +53,19 @@ def test_api_core_endpoints():
     prediction = client.post("/sentiment/predict", json={"text": "Produit correct et confortable."})
     assert prediction.status_code == 200
     assert prediction.json()["sentiment"] in {"positif", "neutre", "negatif"}
+
+
+def test_sentiment_business_rules():
+    client = TestClient(app)
+
+    negative = client.post("/sentiment/predict", json={"text": "Produit de mauvaise qualite, casse et decevant."})
+    assert negative.status_code == 200
+    negative_payload = negative.json()
+    assert negative_payload["sentiment"] == "negatif"
+    assert negative_payload["confidence"] < 1
+
+    positive = client.post("/sentiment/predict", json={"text": "Produit de bonne qualite, excellent et recommande."})
+    assert positive.status_code == 200
+    positive_payload = positive.json()
+    assert positive_payload["sentiment"] == "positif"
+    assert positive_payload["confidence"] < 1

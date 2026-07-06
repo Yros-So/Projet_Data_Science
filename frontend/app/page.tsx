@@ -140,6 +140,13 @@ function pct(value?: number | null) {
   return `${Math.round((value ?? 0) * 100)}%`;
 }
 
+function predictionPct(value?: number | null) {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  return pct(Math.min(value, 0.99));
+}
+
 function number(value?: number | null, digits = 0) {
   return new Intl.NumberFormat("fr-FR", {
     maximumFractionDigits: digits,
@@ -164,6 +171,18 @@ function productKey(product: Product | ProductKpi) {
 
 function productLabel(product: Product | ProductKpi) {
   return "product_title" in product ? product.product_title : product.title;
+}
+
+function supplierKey(supplier: Supplier) {
+  return `${supplier.supplier_id}-${supplier.domain ?? ""}`;
+}
+
+function mergeSuppliers(...groups: Supplier[][]) {
+  const merged = new Map<string, Supplier>();
+  groups.flat().forEach((supplier) => {
+    merged.set(supplierKey(supplier), supplier);
+  });
+  return Array.from(merged.values());
 }
 
 function buyability(product: Product | ProductKpi) {
@@ -361,10 +380,10 @@ function BarList({
   return (
     <div className="bars">
       {rows.length ? (
-        rows.map((row) => {
+        rows.map((row, index) => {
           const value = Number(row[valueKey] ?? 0);
           return (
-            <div className="bar-row" key={`${row[labelKey]}-${value}`}>
+            <div className="bar-row" key={`${row[labelKey]}-${value}-${index}`}>
               <span>{String(row[labelKey])}</span>
               <div className="bar-track">
                 <div className="bar-fill" style={{ width: `${Math.max(4, (value / max) * 100)}%` }} />
@@ -569,7 +588,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const [healthData, filterData, dashboardData, productData, supplierData, categoryData] = await Promise.all([
+      const [healthData, filterData, dashboardData, productData, supplierData, riskySupplierData, categoryData] = await Promise.all([
         apiGet<ApiHealth>("/health"),
         apiGet<FilterOptions>("/filters/options"),
         apiGet<AdminDashboard>(apiPath("/admin/dashboard", { domain: datasetFilter, risk: riskFilter })),
@@ -589,16 +608,26 @@ export default function Home() {
           )
         ),
         apiGet<Supplier[]>(apiPath("/suppliers", { limit: 100, domain: datasetFilter, risk: riskFilter })),
+        apiGet<Supplier[]>(
+          apiPath("/suppliers", {
+            limit: 100,
+            domain: datasetFilter,
+            risk: riskFilter,
+            sort_by: "risque",
+            sort_order: "desc"
+          })
+        ),
         apiGet<CategoryKpi[]>(apiPath("/categories/performance", { limit: 100, domain: datasetFilter, risk: riskFilter }))
       ]);
+      const mergedSuppliers = mergeSuppliers(supplierData, riskySupplierData);
       setApiHealth(healthData);
       setFilterOptions(filterData);
       setDashboard(dashboardData);
       setProducts(productData);
-      setSuppliers(supplierData);
+      setSuppliers(mergedSuppliers);
       setCategoryKpis(categoryData);
       setSelectedProductId((current) => current || (productData[0] ? productKey(productData[0]) : ""));
-      setSelectedSupplierId((current) => current || supplierData[0]?.supplier_id || "");
+      setSelectedSupplierId((current) => current || mergedSuppliers[0]?.supplier_id || "");
     } catch (apiError) {
       setError(apiError instanceof Error ? apiError.message : "API indisponible");
     } finally {
@@ -805,9 +834,30 @@ export default function Home() {
     );
   }, [scopedSuppliers]);
 
+  const issueSuppliers = useMemo(() => {
+    return riskySuppliers.filter(
+      (supplier) => (supplier.nb_problematic_products ?? 0) > 0 || (supplier.supplier_negative_rate ?? 0) > 0
+    );
+  }, [riskySuppliers]);
+
+  const supplierSelectionPool = useMemo(() => {
+    if ((view === "supplier-negative" || view === "supplier-actions") && issueSuppliers.length) {
+      return issueSuppliers;
+    }
+    return scopedSuppliers;
+  }, [issueSuppliers, scopedSuppliers, view]);
+
   const selectedSupplierProducts = useMemo(() => {
     return domainProducts.filter((product) => product.supplier_id === selectedSupplierId);
   }, [domainProducts, selectedSupplierId]);
+
+  const selectedSupplierDisplayProducts = useMemo(() => {
+    const productsById = new Map<string, Product | ProductKpi>();
+    selectedSupplierProducts.forEach((product) => productsById.set(productKey(product), product));
+    supplierDashboard?.top_products?.forEach((product) => productsById.set(productKey(product), product));
+    supplierDashboard?.problematic_products?.forEach((product) => productsById.set(productKey(product), product));
+    return Array.from(productsById.values()).sort((a, b) => (b.popularity_score ?? 0) - (a.popularity_score ?? 0));
+  }, [selectedSupplierProducts, supplierDashboard]);
 
   const selectedSupplierImproveProducts = useMemo(() => {
     const apiProducts = supplierDashboard?.problematic_products ?? [];
@@ -827,11 +877,11 @@ export default function Home() {
     if (!currentProductIsVisible) {
       setSelectedProductId(domainProducts[0] ? productKey(domainProducts[0]) : "");
     }
-    const currentSupplierIsVisible = scopedSuppliers.some((supplier) => supplier.supplier_id === selectedSupplierId);
+    const currentSupplierIsVisible = supplierSelectionPool.some((supplier) => supplier.supplier_id === selectedSupplierId);
     if (!currentSupplierIsVisible) {
-      setSelectedSupplierId(scopedSuppliers[0]?.supplier_id || "");
+      setSelectedSupplierId(supplierSelectionPool[0]?.supplier_id || "");
     }
-  }, [domainProducts, scopedSuppliers, selectedProductId, selectedSupplierId]);
+  }, [domainProducts, selectedProductId, selectedSupplierId, supplierSelectionPool]);
 
   useEffect(() => {
     if (!selectedProductId) {
@@ -1137,7 +1187,7 @@ export default function Home() {
         {!loading && !error && view === "supplier-products" ? (
           <SupplierProductsPage
             onSelectProduct={selectProduct}
-            products={selectedSupplierProducts}
+            products={selectedSupplierDisplayProducts}
             selectedSupplierId={selectedSupplierId}
             setSelectedSupplierId={setSelectedSupplierId}
             suppliers={scopedSuppliers}
@@ -1149,7 +1199,7 @@ export default function Home() {
             reviews={supplierDashboard?.negative_reviews ?? []}
             selectedSupplierId={selectedSupplierId}
             setSelectedSupplierId={setSelectedSupplierId}
-            suppliers={scopedSuppliers}
+            suppliers={issueSuppliers.length ? issueSuppliers : scopedSuppliers}
           />
         ) : null}
 
@@ -1159,7 +1209,7 @@ export default function Home() {
             reviews={supplierDashboard?.negative_reviews ?? []}
             selectedSupplierId={selectedSupplierId}
             setSelectedSupplierId={setSelectedSupplierId}
-            suppliers={scopedSuppliers}
+            suppliers={issueSuppliers.length ? issueSuppliers : scopedSuppliers}
           />
         ) : null}
 
@@ -1803,7 +1853,7 @@ function SentimentPage({
                 icon={ShieldCheck}
                 label="Sentiment"
                 value={sentiment.sentiment}
-                sub={sentiment.confidence ? `Confiance ${pct(sentiment.confidence)}` : undefined}
+                sub={predictionPct(sentiment.confidence) ? `Confiance estimee ${predictionPct(sentiment.confidence)}` : undefined}
               />
               <div className="review">{sentiment.text}</div>
             </div>
