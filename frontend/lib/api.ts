@@ -476,6 +476,8 @@ function predictStaticSentiment(text: string): SentimentResult {
     "nul",
     "nulle",
     "cass",
+    "remboursement",
+    "rembourser",
     "defectueux",
     "abime",
     "decu",

@@ -18,6 +18,8 @@ NEGATIVE_PHRASES = (
     "nul",
     "nulle",
     "casse",
+    "remboursement",
+    "rembourser",
     "defectueux",
     "defectueuse",
     "abime",

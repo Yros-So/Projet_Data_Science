@@ -79,6 +79,7 @@ type PipelineRunResult = {
   scale?: {
     status: string;
     actual_reviews: number;
+    detail_reviews_processed?: number;
     reviews_by_dataset?: Record<string, number>;
     datasets_under_target?: Record<string, number>;
     min_reviews_required_per_dataset?: number;
@@ -114,30 +115,13 @@ type NavItem = {
 
 const navGroups: Array<{ title: string; items: NavItem[] }> = [
   {
-    title: "Pilotage",
+    title: "Navigation",
     items: [
-      { id: "admin", label: "Vue d'ensemble", icon: BarChart3, adminOnly: true },
-      { id: "analytics", label: "Analyse données", icon: TrendingUp, adminOnly: true }
+      { id: "admin", label: "Dashboard", icon: BarChart3 },
+      { id: "client-catalogue", label: "Produits", icon: ShoppingBag },
+      { id: "supplier-dashboard", label: "Fournisseur", icon: Store },
+      { id: "data-ml", label: "Data & ML", icon: Brain }
     ]
-  },
-  {
-    title: "Produits et clients",
-    items: [
-      { id: "client-catalogue", label: "Catalogue", icon: ShoppingBag },
-      { id: "client-product", label: "Détail produit", icon: PackageSearch },
-      { id: "client-sentiment", label: "Analyse sentiment", icon: Brain }
-    ]
-  },
-  {
-    title: "Espace fournisseur",
-    items: [
-      { id: "supplier-dashboard", label: "Dashboard fournisseur", icon: Store },
-      { id: "supplier-negative", label: "Avis négatifs", icon: MessageCircle }
-    ]
-  },
-  {
-    title: "Big Data & ML",
-    items: [{ id: "data-ml", label: "Pipeline et modèles", icon: Brain }]
   }
 ];
 
@@ -231,22 +215,46 @@ function futurePotential(product: Product | ProductKpi) {
   return clampScore(buyability(product) * 0.7 + Math.min((product.popularity_score ?? 0) / 25, 1) * 0.3);
 }
 
-function decision(product: Product | ProductKpi) {
-  if (product.purchase_decision) {
-    return product.purchase_decision;
+function sampleReliability(product: Product | ProductKpi) {
+  const reviews = product.nb_reviews ?? 0;
+  if (reviews >= 100) {
+    return 1;
   }
-  const score = buyability(product);
-  if (score >= 0.75 && (product.risk_score ?? 1) < 0.32) {
+  if (reviews >= 30) {
+    return 0.9;
+  }
+  if (reviews >= 10) {
+    return 0.75;
+  }
+  if (reviews >= 3) {
+    return 0.58;
+  }
+  return 0.42;
+}
+
+function confidenceValue(product: Product | ProductKpi) {
+  const base = product.confidence_score ?? buyability(product);
+  return clampScore(base * sampleReliability(product));
+}
+
+function decision(product: Product | ProductKpi) {
+  const rating = product.avg_rating ?? 0;
+  const negativeRate = product.negative_rate ?? 0;
+  const reviews = product.nb_reviews ?? 0;
+  const risk = product.risk_score ?? negativeRate;
+  const confidence = confidenceValue(product);
+
+  if (rating < 3.2 || negativeRate > 0.3 || risk > 0.65) {
+    return "A eviter";
+  }
+  if (rating >= 4.2 && negativeRate <= 0.1 && reviews >= 10 && confidence >= 0.7 && risk < 0.35) {
     return "Achetable";
   }
-  if (score >= 0.55 && (product.risk_score ?? 1) < 0.5) {
-    return "A surveiller";
-  }
-  return "A eviter";
+  return "A surveiller";
 }
 
 function confidenceLabel(product: Product | ProductKpi) {
-  const score = product.confidence_score ?? buyability(product);
+  const score = confidenceValue(product);
   if (score >= 0.74) {
     return "Confiance élevée";
   }
@@ -593,6 +601,120 @@ function SupplierSelect({
   );
 }
 
+function GlobalFilterBar({
+  categoryFilter,
+  categoryOptions,
+  datasetFilter,
+  domainOptions,
+  filterOptions,
+  onReset,
+  periodFilter,
+  riskFilter,
+  sentimentFilter,
+  setCategoryFilter,
+  setDatasetFilter,
+  setPeriodFilter,
+  setRiskFilter,
+  setSentimentFilter,
+  setSupplierFilter,
+  supplierFilter,
+  supplierOptions
+}: {
+  categoryFilter: string;
+  categoryOptions: string[];
+  datasetFilter: string;
+  domainOptions: string[];
+  filterOptions: FilterOptions | null;
+  onReset: () => void;
+  periodFilter: PeriodFilter;
+  riskFilter: RiskFilter;
+  sentimentFilter: SentimentFilter;
+  setCategoryFilter: (value: string) => void;
+  setDatasetFilter: (value: string) => void;
+  setPeriodFilter: (value: PeriodFilter) => void;
+  setRiskFilter: (value: RiskFilter) => void;
+  setSentimentFilter: (value: SentimentFilter) => void;
+  setSupplierFilter: (value: string) => void;
+  supplierFilter: string;
+  supplierOptions: string[];
+}) {
+  return (
+    <div className="filterbar">
+      <label>
+        Dataset
+        <select value={datasetFilter} onChange={(event) => setDatasetFilter(event.target.value)}>
+          <option value="all">Tous</option>
+          {domainOptions.map((domain) => (
+            <option value={domain} key={domain}>
+              {domain}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Catégorie
+        <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+          <option value="all">Toutes</option>
+          {categoryOptions.map((category) => (
+            <option value={category} key={category}>
+              {cleanText(category)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Fournisseur
+        <select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
+          <option value="all">Tous</option>
+          {supplierOptions.map((supplier) => (
+            <option value={supplier} key={supplier}>
+              {cleanText(supplier)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Sentiment
+        <select value={sentimentFilter} onChange={(event) => setSentimentFilter(event.target.value as SentimentFilter)}>
+          <option value="all">Tous</option>
+          <option value="positif">Positif</option>
+          <option value="neutre">Neutre</option>
+          <option value="negatif">Négatif</option>
+        </select>
+      </label>
+
+      <label>
+        Risque
+        <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value as RiskFilter)}>
+          <option value="all">Tous</option>
+          <option value="faible">Faible</option>
+          <option value="moyen">Moyen</option>
+          <option value="eleve">Élevé</option>
+        </select>
+      </label>
+
+      <label>
+        Période
+        <select value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
+          <option value="all">Toutes</option>
+          {(filterOptions?.years.length ? filterOptions.years : [2020, 2021, 2022, 2023]).map((year) => (
+            <option value={year} key={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <button className="button secondary" onClick={onReset} type="button">
+        Réinitialiser
+      </button>
+    </div>
+  );
+}
+
 export default function Home() {
   const [view, setView] = useState<View>("admin");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -614,6 +736,7 @@ export default function Home() {
   const [productDetail, setProductDetail] = useState<Product | null>(null);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [supplierDashboard, setSupplierDashboard] = useState<SupplierDashboard | null>(null);
+  const [supplierProducts, setSupplierProducts] = useState<ProductKpi[]>([]);
   const [query, setQuery] = useState("");
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("smart");
@@ -976,11 +1099,12 @@ export default function Home() {
 
   const selectedSupplierDisplayProducts = useMemo(() => {
     const productsById = new Map<string, Product | ProductKpi>();
+    supplierProducts.forEach((product) => productsById.set(productKey(product), product));
     selectedSupplierProducts.forEach((product) => productsById.set(productKey(product), product));
     supplierDashboard?.top_products?.forEach((product) => productsById.set(productKey(product), product));
     supplierDashboard?.problematic_products?.forEach((product) => productsById.set(productKey(product), product));
     return Array.from(productsById.values()).sort((a, b) => (b.popularity_score ?? 0) - (a.popularity_score ?? 0));
-  }, [selectedSupplierProducts, supplierDashboard]);
+  }, [selectedSupplierProducts, supplierDashboard, supplierProducts]);
 
   const selectedSupplierImproveProducts = useMemo(() => {
     const apiProducts = supplierDashboard?.problematic_products ?? [];
@@ -1028,13 +1152,22 @@ export default function Home() {
 
   useEffect(() => {
     if (!selectedSupplierId) {
+      setSupplierDashboard(null);
+      setSupplierProducts([]);
       return;
     }
     async function loadSupplier() {
       try {
-        setSupplierDashboard(await apiGet<SupplierDashboard>(`/suppliers/${selectedSupplierId}/dashboard`));
+        const [dashboardData, productsData, reviewsData] = await Promise.all([
+          apiGet<SupplierDashboard>(`/suppliers/${selectedSupplierId}/dashboard`),
+          apiGet<ProductKpi[]>(apiPath(`/suppliers/${selectedSupplierId}/products`, { limit: 25 })),
+          apiGet<Review[]>(apiPath(`/suppliers/${selectedSupplierId}/negative-reviews`, { limit: 10 }))
+        ]);
+        setSupplierDashboard({ ...dashboardData, negative_reviews: reviewsData });
+        setSupplierProducts(productsData);
       } catch {
         setSupplierDashboard(null);
+        setSupplierProducts([]);
       }
     }
     void loadSupplier();
@@ -1060,38 +1193,51 @@ export default function Home() {
     }
   }
 
+  function resetFilters() {
+    setDatasetFilter("all");
+    setCategoryFilter("all");
+    setSupplierFilter("all");
+    setSentimentFilter("all");
+    setRiskFilter("all");
+    setPeriodFilter("all");
+    setDecisionFilter("all");
+    setMinimumScore(0);
+    setQuery("");
+  }
+
   function selectProduct(id: string, target: View = "client-product") {
     setSelectedProductId(id);
-    setView(target);
+    const destination = target === "client-product" || target === "client-recommendations" ? "client-catalogue" : target;
+    setView(destination);
   }
 
   const activeTitle: Record<View, string> = {
-    admin: "Dashboard administrateur",
-    analytics: "Analyse des données",
-    "client-catalogue": "Catalogue client",
+    admin: "Dashboard",
+    analytics: "Dashboard",
+    "client-catalogue": "Produits",
     "client-product": "Détail produit",
     "client-recommendations": "Recommandations client",
     "client-sentiment": "Analyse sentiment",
-    "supplier-dashboard": "Dashboard fournisseur",
+    "supplier-dashboard": "Fournisseur",
     "supplier-products": "Mes produits",
     "supplier-negative": "Avis négatifs",
     "supplier-actions": "Actions recommandées",
-    "data-ml": "Data & Machine Learning",
+    "data-ml": "Data & ML",
     guide: "Architecture et documentation"
   };
 
   const activeDescription: Record<View, string> = {
-    admin: "Vue de pilotage : volume, alertes, sentiment et produits prioritaires.",
-    analytics: "Graphiques de répartition, tendance, risques et performance par dataset.",
-    "client-catalogue": "Recherche et comparaison des produits avec filtres métier.",
+    admin: "Vue claire du projet : volume consolidé, sentiments, risques et fournisseurs à surveiller.",
+    analytics: "Vue claire du projet : volume consolidé, sentiments, risques et fournisseurs à surveiller.",
+    "client-catalogue": "Catalogue, fiche produit, avis récents et recommandations dans une seule page.",
     "client-product": "Fiche détaillée, avis récents et recommandations du produit sélectionné.",
     "client-recommendations": "Produits similaires classés par score hybride.",
     "client-sentiment": "Test direct du modèle de classification de sentiment.",
-    "supplier-dashboard": "Synthèse fournisseur : score, produits et avis négatifs.",
+    "supplier-dashboard": "KPIs fournisseur, produits, avis négatifs et actions recommandées.",
     "supplier-products": "Liste des produits rattachés au fournisseur sélectionné.",
     "supplier-negative": "Avis négatifs utiles pour prioriser les corrections.",
     "supplier-actions": "Actions recommandées à partir des signaux faibles.",
-    "data-ml": "Suivi Big Data, qualité, pipeline et entraînement ML.",
+    "data-ml": "Pipeline, qualité des données, volumes utilisés et test du modèle sentiment.",
     guide: "Lecture fonctionnelle de la chaîne Bronze, Silver, Gold, API et interface."
   };
 
@@ -1132,68 +1278,6 @@ export default function Home() {
             ))}
           </nav>
 
-          <div className="dataset-picker filter-panel">
-            <div className="nav-group-title">Filtres globaux</div>
-            <label htmlFor="dataset-select">Catégorie dataset</label>
-            <select id="dataset-select" value={datasetFilter} onChange={(event) => setDatasetFilter(event.target.value)}>
-              <option value="all">Toutes</option>
-              {domainOptions.map((domain) => (
-                <option value={domain} key={domain}>
-                  {domain}
-                </option>
-              ))}
-            </select>
-
-            <label htmlFor="category-select">Catégorie produit</label>
-            <select id="category-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-              <option value="all">Toutes</option>
-              {categoryOptions.map((category) => (
-                <option value={category} key={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-
-            <label htmlFor="supplier-filter">Fournisseur</label>
-            <select id="supplier-filter" value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}>
-              <option value="all">Tous</option>
-              {supplierOptions.map((supplier) => (
-                <option value={supplier} key={supplier}>
-                  {supplier}
-                </option>
-              ))}
-            </select>
-
-            <label htmlFor="sentiment-filter">Sentiment</label>
-            <select
-              id="sentiment-filter"
-              value={sentimentFilter}
-              onChange={(event) => setSentimentFilter(event.target.value as SentimentFilter)}
-            >
-              <option value="all">Tous</option>
-              <option value="positif">Positif</option>
-              <option value="neutre">Neutre</option>
-              <option value="negatif">Négatif</option>
-            </select>
-
-            <label htmlFor="risk-filter">Niveau de risque</label>
-            <select id="risk-filter" value={riskFilter} onChange={(event) => setRiskFilter(event.target.value as RiskFilter)}>
-              <option value="all">Tous</option>
-              <option value="faible">Faible</option>
-              <option value="moyen">Moyen</option>
-              <option value="eleve">Eleve</option>
-            </select>
-
-            <label htmlFor="period-filter">Période</label>
-            <select id="period-filter" value={periodFilter} onChange={(event) => setPeriodFilter(event.target.value as PeriodFilter)}>
-              <option value="all">Toutes</option>
-              {(filterOptions?.years.length ? filterOptions.years : [2020, 2021, 2022, 2023]).map((year) => (
-                <option value={year} key={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
         </aside>
       ) : null}
 
@@ -1208,24 +1292,36 @@ export default function Home() {
               <SlidersHorizontal size={16} />
               {sidebarOpen ? "Cacher menu" : "Afficher menu"}
             </button>
-            <span className="pill">{datasetFilter === "all" ? "Global" : datasetFilter}</span>
-            <CheckCircle2 size={16} />
-            API FastAPI
-            <span className="pill">{apiHealth?.data_source?.active ?? "..."}</span>
-            <button
-              className={isAdminLoggedIn ? "button" : "button secondary"}
-              onClick={() => setIsAdminLoggedIn((current) => !current)}
-              type="button"
-            >
-              <ShieldCheck size={16} />
-              {isAdminLoggedIn ? "Admin connecte" : "Connexion admin"}
-            </button>
+            <span className="pill good">Mode démo</span>
+            <span className="pill">{number(dashboardKpis.total_reviews)} avis consolidés</span>
+            <span className="pill">{number(dashboardKpis.total_products)} produits Gold</span>
+            <span className="pill">Mis à jour aujourd'hui</span>
             <button className="button secondary" onClick={() => void loadCoreData()} type="button">
               <RefreshCw size={16} />
               Actualiser
             </button>
           </div>
         </div>
+
+        <GlobalFilterBar
+          categoryFilter={categoryFilter}
+          categoryOptions={categoryOptions}
+          datasetFilter={datasetFilter}
+          domainOptions={domainOptions}
+          filterOptions={filterOptions}
+          onReset={resetFilters}
+          periodFilter={periodFilter}
+          riskFilter={riskFilter}
+          sentimentFilter={sentimentFilter}
+          setCategoryFilter={setCategoryFilter}
+          setDatasetFilter={setDatasetFilter}
+          setPeriodFilter={setPeriodFilter}
+          setRiskFilter={setRiskFilter}
+          setSentimentFilter={setSentimentFilter}
+          setSupplierFilter={setSupplierFilter}
+          supplierFilter={supplierFilter}
+          supplierOptions={supplierOptions}
+        />
 
         {error ? <div className="error">{error}</div> : null}
         {loading ? <div className="empty">Chargement des données...</div> : null}
@@ -1242,21 +1338,12 @@ export default function Home() {
           />
         ) : null}
 
-        {!loading && !error && view === "analytics" ? (
-          <AnalyticsPage
-            categories={dashboardCategories}
-            dataQualityReport={dashboard?.data_quality_report ?? null}
-            kpis={dashboardKpis}
-            products={scopedProducts}
-            riskySuppliers={riskySuppliers}
-            sentimentRows={dashboardSentimentRows}
-          />
-        ) : null}
-
         {!loading && !error && view === "client-catalogue" ? (
           <ClientCataloguePage
             products={scopedProducts}
+            productDetail={productDetail}
             productSummary={productSummary}
+            recommendations={recommendations}
             query={query}
             setQuery={setQuery}
             decisionFilter={decisionFilter}
@@ -1269,70 +1356,14 @@ export default function Home() {
           />
         ) : null}
 
-        {!loading && !error && view === "client-product" ? (
-          <ProductPage
-            products={domainProducts}
-            selectedProductId={selectedProductId}
-            setSelectedProductId={setSelectedProductId}
-            productDetail={productDetail}
-            recommendations={recommendations}
-          />
-        ) : null}
-
-        {!loading && !error && view === "client-recommendations" ? (
-          <RecommendationsPage
-            products={domainProducts}
-            selectedProductId={selectedProductId}
-            setSelectedProductId={setSelectedProductId}
-            recommendations={recommendations}
-          />
-        ) : null}
-
-        {!loading && !error && view === "client-sentiment" ? (
-          <SentimentPage
-            predictSentiment={predictSentiment}
-            reviewText={reviewText}
-            sentiment={sentiment}
-            setReviewText={setReviewText}
-          />
-        ) : null}
-
         {!loading && !error && view === "supplier-dashboard" ? (
           <SupplierDashboardPage
-            onSelectProduct={selectProduct}
-            selectedSupplierId={selectedSupplierId}
-            setSelectedSupplierId={setSelectedSupplierId}
-            supplierDashboard={supplierDashboard}
-            suppliers={scopedSuppliers}
-          />
-        ) : null}
-
-        {!loading && !error && view === "supplier-products" ? (
-          <SupplierProductsPage
             onSelectProduct={selectProduct}
             products={selectedSupplierDisplayProducts}
             selectedSupplierId={selectedSupplierId}
             setSelectedSupplierId={setSelectedSupplierId}
+            supplierDashboard={supplierDashboard}
             suppliers={scopedSuppliers}
-          />
-        ) : null}
-
-        {!loading && !error && view === "supplier-negative" ? (
-          <SupplierNegativePage
-            reviews={supplierDashboard?.negative_reviews ?? []}
-            selectedSupplierId={selectedSupplierId}
-            setSelectedSupplierId={setSelectedSupplierId}
-            suppliers={issueSuppliers.length ? issueSuppliers : scopedSuppliers}
-          />
-        ) : null}
-
-        {!loading && !error && view === "supplier-actions" ? (
-          <SupplierActionsPage
-            products={selectedSupplierImproveProducts}
-            reviews={supplierDashboard?.negative_reviews ?? []}
-            selectedSupplierId={selectedSupplierId}
-            setSelectedSupplierId={setSelectedSupplierId}
-            suppliers={issueSuppliers.length ? issueSuppliers : scopedSuppliers}
           />
         ) : null}
 
@@ -1345,7 +1376,11 @@ export default function Home() {
             onRunPipeline={runLiveTraining}
             pipelineLoading={pipelineLoading}
             pipelineResult={pipelineResult}
+            predictSentiment={predictSentiment}
             products={scopedProducts}
+            reviewText={reviewText}
+            sentiment={sentiment}
+            setReviewText={setReviewText}
           />
         ) : null}
 
@@ -1379,13 +1414,6 @@ function AdminPage({
   sentimentRows: Array<{ sentiment: string; nb_reviews: number; avg_rating: number }>;
   onSelectProduct: (id: string) => void;
 }) {
-  const scale = dataQualityReport?.scale;
-  const reviewsByDataset = scale?.reviews_by_dataset ?? {};
-  const datasetsUnderTarget = scale?.datasets_under_target ?? {};
-  const minReviewsPerDataset = scale?.min_reviews_required_per_dataset ?? 1500000;
-  const datasetCount = Math.max(Object.keys(reviewsByDataset).length, 1);
-  const minimumTotalTarget = minReviewsPerDataset * datasetCount;
-  const scaleReady = scale?.status === "production_ready";
   const sentimentChartRows = sentimentRows.map((row) => ({
     label: row.sentiment,
     value: row.nb_reviews,
@@ -1394,37 +1422,12 @@ function AdminPage({
 
   return (
     <section className="grid">
-      {!scaleReady ? (
-        <div className="panel">
-          <div className="panel-header">
-            <h2>Volume données sous seuil manager</h2>
-            <span className="pill warn">Démo / insuffisant</span>
-          </div>
-          <div className="panel-body reviews">
-            <div className="review">
-              Objectif minimum : {number(minReviewsPerDataset)} avis par dataset, soit {number(minimumTotalTarget)} avis
-              minimum pour les {datasetCount} datasets actifs.
-            </div>
-            <div className="review">
-              Volume actuellement chargé : {number(scale?.actual_reviews ?? kpis.total_reviews)} avis. Le modèle actuel est
-              donc seulement une démonstration locale, pas l'entraînement final.
-            </div>
-            {Object.entries(reviewsByDataset).map(([domain, count]) => (
-              <div className="review" key={domain}>
-                {domain} : {number(count)} avis
-                {datasetsUnderTarget[domain] !== undefined ? " - sous 1 500 000" : " - seuil atteint"}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       <div className="grid metrics">
         <Metric icon={ShoppingBag} label="Avis analysés" value={number(kpis.total_reviews)} />
-        <Metric icon={Target} label="Objectif minimum" value={number(minimumTotalTarget)} />
         <Metric icon={PackageSearch} label="Produits" value={number(kpis.total_products)} />
         <Metric icon={Store} label="Fournisseurs" value={number(kpis.total_suppliers)} />
         <Metric icon={Star} label="Note moyenne" value={number(kpis.average_rating_global, 2)} />
+        <Metric icon={CheckCircle2} label="Avis positifs" value={pct(kpis.positive_rate_global)} />
         <Metric icon={AlertTriangle} label="Avis négatifs" value={pct(kpis.negative_rate_global)} />
       </div>
 
@@ -1628,7 +1631,9 @@ function AnalyticsPage({
 
 function ClientCataloguePage({
   products,
+  productDetail,
   productSummary,
+  recommendations,
   query,
   setQuery,
   decisionFilter,
@@ -1640,7 +1645,9 @@ function ClientCataloguePage({
   onSelectProduct
 }: {
   products: Product[];
+  productDetail: Product | null;
   productSummary: { achetable: number; watch: number; avoid: number };
+  recommendations: Recommendation[];
   query: string;
   setQuery: (value: string) => void;
   decisionFilter: DecisionFilter;
@@ -1703,40 +1710,10 @@ function ClientCataloguePage({
         </div>
       </div>
 
-      <div className="product-grid">
-        {products.slice(0, 12).map((product) => (
-          <article className="product-card" key={productKey(product)}>
-            <div className="product-visual">
-              <div className="visual-block" />
-              <div className="visual-line" />
-            </div>
-            <div>
-              <div className="product-title">{cleanText(product.title)}</div>
-              <div className="muted">
-                {cleanText(product.main_category)} - {cleanText(product.store)}
-              </div>
-            </div>
-            <div className="grid three">
-              <span className="pill">{number(product.avg_rating, 2)} / 5</span>
-              <span className="pill good">{pct(product.positive_rate)}</span>
-              <span className={confidenceClass(product)}>{confidenceLabel(product)}</span>
-            </div>
-            <div className="muted">{explainProduct(product)}</div>
-            <div className="button-row">
-              <button className="button" onClick={() => onSelectProduct(productKey(product), "client-product")} type="button">
-                <PackageSearch size={16} />
-                Détail
-              </button>
-              <button className="button secondary" onClick={() => onSelectProduct(productKey(product), "client-recommendations")} type="button">
-                <Target size={16} />
-                Recos
-              </button>
-            </div>
-          </article>
-        ))}
+      <div className="products-layout">
+        <ClientProductTable products={products} onSelect={onSelectProduct} />
+        <ProductInsightPanel productDetail={productDetail} recommendations={recommendations} />
       </div>
-
-      <ClientProductTable products={products} onSelect={onSelectProduct} />
     </section>
   );
 }
@@ -1753,8 +1730,10 @@ function ClientProductTable({ products, onSelect }: { products: Product[]; onSel
             <tr>
               <th>Produit</th>
               <th>Note</th>
+              <th>Avis</th>
               <th>Confiance</th>
-              <th>Avis positifs</th>
+              <th>Négatifs</th>
+              <th>Risque</th>
               <th>Décision</th>
               <th></th>
             </tr>
@@ -1769,22 +1748,25 @@ function ClientProductTable({ products, onSelect }: { products: Product[]; onSel
                   </div>
                 </td>
                 <td>{number(product.avg_rating, 2)}</td>
+                <td>{number(product.nb_reviews)}</td>
                 <td>
                   <span className={confidenceClass(product)}>{confidenceLabel(product)}</span>
                 </td>
                 <td>
-                  <span className="pill good">{pct(product.positive_rate)}</span>
+                  <span className={product.negative_rate && product.negative_rate > 0.3 ? "pill danger" : "pill"}>{pct(product.negative_rate)}</span>
+                </td>
+                <td>
+                  <span className={riskLevel(product) === "eleve" ? "pill danger" : riskLevel(product) === "moyen" ? "pill warn" : "pill good"}>
+                    {riskLevel(product)}
+                  </span>
                 </td>
                 <td>
                   <span className={decisionClass(decision(product))}>{decisionLabel(decision(product))}</span>
                 </td>
                 <td>
                   <div className="button-row">
-                    <button className="button secondary" onClick={() => onSelect(productKey(product), "client-product")} type="button">
-                      Détail
-                    </button>
-                    <button className="button secondary" onClick={() => onSelect(productKey(product), "client-recommendations")} type="button">
-                      Recos
+                    <button className="button secondary compact" onClick={() => onSelect(productKey(product), "client-catalogue")} type="button">
+                      Voir
                     </button>
                   </div>
                 </td>
@@ -1794,6 +1776,61 @@ function ClientProductTable({ products, onSelect }: { products: Product[]; onSel
         </table>
       </div>
     </div>
+  );
+}
+
+function ProductInsightPanel({
+  productDetail,
+  recommendations
+}: {
+  productDetail: Product | null;
+  recommendations: Recommendation[];
+}) {
+  const sentimentRows = productDetail
+    ? [
+        { label: "Positifs", value: productDetail.positive_rate ?? 0 },
+        { label: "Neutres", value: productDetail.neutral_rate ?? 0 },
+        { label: "Négatifs", value: productDetail.negative_rate ?? 0 }
+      ]
+    : [];
+
+  if (!productDetail) {
+    return (
+      <div className="panel sticky-panel">
+        <div className="panel-header">
+          <h2>Fiche produit</h2>
+        </div>
+        <div className="panel-body">
+          <div className="empty">Sélectionne un produit dans le tableau pour voir le détail, les avis et les recommandations.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <aside className="grid sticky-panel">
+      <div className="panel">
+        <div className="panel-header">
+          <h2>{cleanText(productDetail.title)}</h2>
+          <span className={decisionClass(decision(productDetail))}>{decisionLabel(decision(productDetail))}</span>
+        </div>
+        <div className="panel-body grid">
+          <div className="grid two compact-metrics">
+            <Metric icon={Target} label="Catégorie" value={cleanText(productDetail.main_category) || "-"} />
+            <Metric icon={Store} label="Fournisseur" value={cleanText(productDetail.store) || "-"} />
+            <Metric icon={Star} label="Note" value={`${number(productDetail.avg_rating, 2)} / 5`} />
+            <Metric icon={ShoppingBag} label="Avis" value={number(productDetail.nb_reviews)} />
+            <Metric icon={AlertTriangle} label="Négatifs" value={pct(productDetail.negative_rate)} />
+            <Metric icon={ShieldCheck} label="Confiance" value={pct(confidenceValue(productDetail))} />
+          </div>
+          <div className="review">{explainProduct(productDetail)}</div>
+          <BarList rows={sentimentRows} labelKey="label" valueKey="value" formatter={pct} />
+        </div>
+      </div>
+
+      <ReviewsList reviews={productDetail.recent_reviews ?? []} title="Avis récents" />
+      <RecommendationsPanel recommendations={recommendations} />
+    </aside>
   );
 }
 
@@ -1961,14 +1998,18 @@ function SupplierDashboardPage({
   selectedSupplierId,
   setSelectedSupplierId,
   supplierDashboard,
+  products,
   onSelectProduct
 }: {
   suppliers: Supplier[];
   selectedSupplierId: string;
   setSelectedSupplierId: (id: string) => void;
   supplierDashboard: SupplierDashboard | null;
+  products: Array<Product | ProductKpi>;
   onSelectProduct: (id: string, target?: View) => void;
 }) {
+  const reviews = supplierDashboard?.negative_reviews ?? [];
+
   return (
     <section className="grid">
       <SupplierSelect suppliers={suppliers} selectedSupplierId={selectedSupplierId} setSelectedSupplierId={setSelectedSupplierId} />
@@ -1990,9 +2031,9 @@ function SupplierDashboardPage({
           <div className="grid two">
             <TechnicalProductTable
               onSelect={(id) => onSelectProduct(id, "client-product")}
-              products={supplierDashboard.top_products}
+              products={products.length ? products : supplierDashboard.top_products}
               scoreKey="popularity_score"
-              title="Meilleurs produits"
+              title="Produits du fournisseur"
             />
             <TechnicalProductTable
               onSelect={(id) => onSelectProduct(id, "client-product")}
@@ -2002,12 +2043,57 @@ function SupplierDashboardPage({
             />
           </div>
 
-          <ReviewsList reviews={supplierDashboard.negative_reviews ?? []} title="Avis négatifs récents" />
+          <div className="grid two">
+            <ReviewsList
+              emptyMessage="Aucun avis négatif détecté pour ce fournisseur sur l'échantillon actuel."
+              reviews={reviews}
+              title="Avis négatifs récents"
+            />
+            <SupplierActionsPanel products={supplierDashboard.problematic_products} reviews={reviews} />
+          </div>
         </>
       ) : (
         <div className="empty">Fournisseur introuvable.</div>
       )}
     </section>
+  );
+}
+
+function SupplierActionsPanel({ products, reviews }: { products: Array<Product | ProductKpi>; reviews: Review[] }) {
+  const hasSizeIssue = reviews.some((review) => review.text.toLowerCase().includes("taille"));
+  const hasQualityIssue = reviews.some((review) => {
+    const text = review.text.toLowerCase();
+    return text.includes("qualite") || text.includes("qualité");
+  });
+  const hasDeliveryIssue = reviews.some((review) => review.text.toLowerCase().includes("livraison"));
+  const actions = [
+    hasSizeIssue
+      ? "Vérifier les tailles, dimensions et variantes dans la fiche produit."
+      : "Contrôler que les titres et descriptions donnent assez de contexte avant achat.",
+    hasQualityIssue
+      ? "Contrôler matériaux, photos et promesse qualité sur les produits signalés."
+      : "Surveiller les produits dont la confiance descend sous le niveau moyen.",
+    hasDeliveryIssue
+      ? "Revoir la promesse logistique ou les informations de délai."
+      : "Comparer les produits à améliorer avec les meilleurs produits du même fournisseur.",
+    products.length
+      ? `Prioriser ${number(products.length)} produit(s) à améliorer.`
+      : "Aucun produit prioritaire détecté dans l'export actuel."
+  ];
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2>Actions recommandées</h2>
+      </div>
+      <div className="panel-body reviews">
+        {actions.map((action) => (
+          <div className="review" key={action}>
+            <Lightbulb size={16} /> {action}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2117,6 +2203,10 @@ function DataMlPage({
   onRunPipeline,
   pipelineLoading,
   pipelineResult,
+  predictSentiment,
+  reviewText,
+  sentiment,
+  setReviewText,
   products
 }: {
   apiHealth: ApiHealth | null;
@@ -2126,6 +2216,10 @@ function DataMlPage({
   onRunPipeline: () => void;
   pipelineLoading: boolean;
   pipelineResult: PipelineRunResult | null;
+  predictSentiment: () => void;
+  reviewText: string;
+  sentiment: SentimentResult | null;
+  setReviewText: (value: string) => void;
   products: Product[];
 }) {
   const scale = pipelineResult?.scale ?? dataQualityReport?.scale;
@@ -2133,13 +2227,15 @@ function DataMlPage({
   const datasetsUnderTarget = scale?.datasets_under_target ?? {};
   const minReviewsPerDataset = scale?.min_reviews_required_per_dataset ?? 1500000;
   const scaleReady = scale?.status === "production_ready";
+  const detailedReviews = scale?.detail_reviews_processed ?? kpis.detail_reviews_processed ?? 0;
 
   return (
     <section className="grid">
       <div className="grid metrics">
-        <Metric icon={ShoppingBag} label="Avis traités" value={number(kpis.total_reviews)} />
+        <Metric icon={ShoppingBag} label="Avis consolidés" value={number(kpis.total_reviews)} />
+        <Metric icon={Search} label="Avis détaillés" value={number(detailedReviews)} />
         <Metric icon={PackageSearch} label="Produits Gold" value={number(kpis.total_products)} />
-        <Metric icon={Target} label="Catégories Gold" value={number(kpis.total_categories)} />
+        <Metric icon={Target} label="Produits consultables" value={number(products.length)} />
         <Metric icon={CheckCircle2} label="Source API" value={apiHealth?.data_source?.active ?? "auto"} />
         <Metric
           icon={scaleReady ? CheckCircle2 : AlertTriangle}
@@ -2195,10 +2291,12 @@ function DataMlPage({
           <div className="panel-body reviews">
             <div className="review">Modele sentiment : TF-IDF + comparaison baseline / Naive Bayes / Logistic Regression.</div>
             <div className="review">Recommandation : similarité texte + confiance + popularité.</div>
-            <div className="review">Produits consultables chargés : {number(products.length)}</div>
+            <div className="review">
+              Les pages produit affichent un échantillon consultable. Les KPIs globaux restent séparés du détail matérialisé.
+            </div>
             {pipelineResult ? (
               <div className="review">
-                Dernier run : {pipelineResult.quality_status}, {number(pipelineResult.reviews)} avis,{" "}
+                Dernier run : {pipelineResult.quality_status}, volume consolidé {number(pipelineResult.reviews)} avis,{" "}
                 {number(pipelineResult.products)} produits, modèle {pipelineResult.model?.best_model}.
               </div>
             ) : (
@@ -2224,6 +2322,13 @@ function DataMlPage({
           />
         </div>
       </div>
+
+      <SentimentPage
+        predictSentiment={predictSentiment}
+        reviewText={reviewText}
+        sentiment={sentiment}
+        setReviewText={setReviewText}
+      />
     </section>
   );
 }
@@ -2456,7 +2561,15 @@ function RiskySuppliersTable({ suppliers }: { suppliers: Supplier[] }) {
   );
 }
 
-function ReviewsList({ reviews, title = "Avis récents" }: { reviews: Review[]; title?: string }) {
+function ReviewsList({
+  reviews,
+  title = "Avis récents",
+  emptyMessage = "Aucun avis disponible."
+}: {
+  reviews: Review[];
+  title?: string;
+  emptyMessage?: string;
+}) {
   return (
     <div className="panel">
       <div className="panel-header">
@@ -2476,7 +2589,7 @@ function ReviewsList({ reviews, title = "Avis récents" }: { reviews: Review[]; 
             </div>
           ))
         ) : (
-          <div className="empty">Aucun avis disponible.</div>
+          <div className="empty">{emptyMessage}</div>
         )}
       </div>
     </div>

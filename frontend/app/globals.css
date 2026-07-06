@@ -207,6 +207,38 @@ button {
   flex-wrap: wrap;
 }
 
+.filterbar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin: -8px 0 22px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.filterbar label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filterbar select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: 0;
+  background: #fbfcfe;
+  color: var(--text);
+}
+
 .grid {
   display: grid;
   gap: 20px;
@@ -551,6 +583,31 @@ tr:last-child td {
   gap: 14px;
 }
 
+.products-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.sticky-panel {
+  position: sticky;
+  top: 24px;
+}
+
+.compact-metrics.metrics,
+.compact-metrics {
+  gap: 10px;
+}
+
+.compact-metrics .metric {
+  padding: 12px;
+}
+
+.compact-metrics .metric-value {
+  font-size: 18px;
+}
+
 .product-card {
   display: grid;
   gap: 12px;
@@ -886,9 +943,18 @@ textarea {
   .two,
   .three,
   .product-grid,
+  .products-layout,
   .detail-layout,
   .guide-layout {
     grid-template-columns: 1fr;
+  }
+
+  .filterbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sticky-panel {
+    position: static;
   }
 
   .guide-rules {
@@ -923,6 +989,7 @@ textarea {
   .score-filter,
   .smart-score,
   .guide-input,
+  .filterbar,
   .rule {
     grid-template-columns: 1fr;
   }
