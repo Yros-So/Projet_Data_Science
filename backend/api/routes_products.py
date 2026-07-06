@@ -111,5 +111,9 @@ def product_recommendations(product_id: str, limit: int = Query(default=5, ge=1,
     recommendations = table("recommendations")
     product_recommendations_df = recommendations[recommendations["product_id"] == resolved_id].head(limit)
     if product_recommendations_df.empty:
-        raise HTTPException(status_code=404, detail="Aucune recommandation pour ce produit")
+        domain = resolved_id.split("_", 1)[0] if "_" in resolved_id else None
+        if domain and "domain" in recommendations.columns:
+            product_recommendations_df = recommendations[recommendations["domain"] == domain].head(limit)
+        if product_recommendations_df.empty:
+            product_recommendations_df = recommendations.head(limit)
     return records(product_recommendations_df)

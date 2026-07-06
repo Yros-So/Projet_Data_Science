@@ -28,6 +28,7 @@ import {
   apiPath,
   apiPost,
   CategoryKpi,
+  DataQualityReport,
   FilterOptions,
   Product,
   ProductKpi,
@@ -38,6 +39,7 @@ import {
 
 type View =
   | "admin"
+  | "analytics"
   | "client-catalogue"
   | "client-product"
   | "client-recommendations"
@@ -73,6 +75,14 @@ type PipelineRunResult = {
   reviews: number;
   products: number;
   quality_status: string;
+  scale?: {
+    status: string;
+    actual_reviews: number;
+    reviews_by_dataset?: Record<string, number>;
+    datasets_under_target?: Record<string, number>;
+    min_reviews_required_per_dataset?: number;
+    message?: string;
+  };
   recommendations?: number;
   model?: {
     best_model: string;
@@ -90,11 +100,14 @@ type NavItem = {
 
 const navGroups: Array<{ title: string; items: NavItem[] }> = [
   {
-    title: "Vue globale",
-    items: [{ id: "admin", label: "Dashboard global", icon: BarChart3, adminOnly: true }]
+    title: "Pilotage",
+    items: [
+      { id: "admin", label: "Vue d'ensemble", icon: BarChart3, adminOnly: true },
+      { id: "analytics", label: "Analyse donnees", icon: TrendingUp, adminOnly: true }
+    ]
   },
   {
-    title: "Espace client",
+    title: "Produits et clients",
     items: [
       { id: "client-catalogue", label: "Catalogue", icon: ShoppingBag },
       { id: "client-product", label: "Detail produit", icon: PackageSearch },
@@ -112,7 +125,7 @@ const navGroups: Array<{ title: string; items: NavItem[] }> = [
     ]
   },
   {
-    title: "Data & ML",
+    title: "Big Data & ML",
     items: [{ id: "data-ml", label: "Pipeline et modeles", icon: Brain }]
   },
   {
@@ -121,7 +134,7 @@ const navGroups: Array<{ title: string; items: NavItem[] }> = [
   }
 ];
 
-const defaultDomains = ["Amazon_Fashion", "All_Beauty", "Appliances", "Electronics"];
+const defaultDomains = ["Amazon_Fashion", "Beauty_and_Personal_Care", "Appliances", "Electronics"];
 
 function pct(value?: number | null) {
   return `${Math.round((value ?? 0) * 100)}%`;
@@ -363,6 +376,112 @@ function BarList({
       ) : (
         <div className="empty">Aucune donnee pour ce filtre.</div>
       )}
+    </div>
+  );
+}
+
+type ChartDatum = {
+  label: string;
+  value: number;
+  color?: string;
+};
+
+const chartColors = ["#157f72", "#d28a25", "#496783", "#c75832", "#6f7d2c", "#8a5a83"];
+
+function DonutChart({
+  rows,
+  centerLabel,
+  centerValue
+}: {
+  rows: ChartDatum[];
+  centerLabel: string;
+  centerValue: string;
+}) {
+  const total = rows.reduce((sum, row) => sum + Math.max(row.value, 0), 0);
+  let cursor = 0;
+  const background =
+    total > 0
+      ? rows
+          .map((row, index) => {
+            const start = cursor;
+            const span = (Math.max(row.value, 0) / total) * 360;
+            cursor += span;
+            return `${row.color ?? chartColors[index % chartColors.length]} ${start}deg ${cursor}deg`;
+          })
+          .join(", ")
+      : "#e8eef4 0deg 360deg";
+
+  return (
+    <div className="donut-layout">
+      <div className="donut" style={{ background: `conic-gradient(${background})` }}>
+        <div className="donut-center">
+          <strong>{centerValue}</strong>
+          <span>{centerLabel}</span>
+        </div>
+      </div>
+      <div className="chart-legend">
+        {rows.map((row, index) => (
+          <div className="legend-row" key={row.label}>
+            <span className="legend-swatch" style={{ background: row.color ?? chartColors[index % chartColors.length] }} />
+            <span>{row.label}</span>
+            <strong>{total > 0 ? pct(row.value / total) : "0%"}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrendChart({ rows }: { rows: ChartDatum[] }) {
+  const width = 520;
+  const height = 180;
+  const padding = 26;
+  const max = Math.max(...rows.map((row) => row.value), 1);
+  const points = rows.map((row, index) => {
+    const x = padding + (index * (width - padding * 2)) / Math.max(rows.length - 1, 1);
+    const y = height - padding - (row.value / max) * (height - padding * 2);
+    return { ...row, x, y };
+  });
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+  return (
+    <div className="trend-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Tendance des avis par an">
+        <line className="axis" x1={padding} x2={width - padding} y1={height - padding} y2={height - padding} />
+        <polyline className="trend-line" points={polyline} />
+        {points.map((point) => (
+          <g key={point.label}>
+            <circle className="trend-point" cx={point.x} cy={point.y} r="4" />
+            <text className="trend-value" x={point.x} y={Math.max(14, point.y - 10)} textAnchor="middle">
+              {number(point.value)}
+            </text>
+            <text className="trend-label" x={point.x} y={height - 6} textAnchor="middle">
+              {point.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function ScoreBars({ rows }: { rows: ChartDatum[] }) {
+  return (
+    <div className="score-bars">
+      {rows.map((row, index) => (
+        <div className="score-bar" key={row.label}>
+          <div>
+            <span>{row.label}</span>
+            <strong>{pct(row.value)}</strong>
+          </div>
+          <div className="bar-track">
+            <div
+              className="bar-fill"
+              style={{ background: row.color ?? chartColors[index % chartColors.length], width: `${clampScore(row.value) * 100}%` }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -775,6 +894,7 @@ export default function Home() {
 
   const activeTitle: Record<View, string> = {
     admin: "Dashboard administrateur",
+    analytics: "Analyse des donnees",
     "client-catalogue": "Catalogue client",
     "client-product": "Detail produit",
     "client-recommendations": "Recommandations client",
@@ -785,6 +905,21 @@ export default function Home() {
     "supplier-actions": "Actions recommandees",
     "data-ml": "Data & Machine Learning",
     guide: "Architecture et documentation"
+  };
+
+  const activeDescription: Record<View, string> = {
+    admin: "Vue de pilotage : volume, alertes, sentiment et produits prioritaires.",
+    analytics: "Graphiques de repartition, tendance, risques et performance par dataset.",
+    "client-catalogue": "Recherche et comparaison des produits avec filtres metier.",
+    "client-product": "Fiche detaillee, avis recents et recommandations du produit selectionne.",
+    "client-recommendations": "Produits similaires classes par score hybride.",
+    "client-sentiment": "Test direct du modele de classification de sentiment.",
+    "supplier-dashboard": "Synthese fournisseur : score, produits et avis negatifs.",
+    "supplier-products": "Liste des produits rattaches au fournisseur selectionne.",
+    "supplier-negative": "Avis negatifs utiles pour prioriser les corrections.",
+    "supplier-actions": "Actions recommandees a partir des signaux faibles.",
+    "data-ml": "Suivi Big Data, qualite, pipeline et entrainement ML.",
+    guide: "Lecture fonctionnelle de la chaine Bronze, Silver, Gold, API et interface."
   };
 
   return (
@@ -799,7 +934,33 @@ export default function Home() {
             </div>
           </div>
 
+          <nav className="nav" aria-label="Navigation principale">
+            {navGroups.map((group) => (
+              <div className="nav-group" key={group.title}>
+                <div className="nav-group-title">{group.title}</div>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const locked = Boolean(item.adminOnly && !isAdminLoggedIn);
+                  return (
+                    <button
+                      className={["nav-button", view === item.id ? "active" : "", locked ? "locked" : ""].join(" ")}
+                      disabled={locked}
+                      key={item.id}
+                      onClick={() => setView(item.id)}
+                      title={locked ? "Connexion admin requise" : item.label}
+                      type="button"
+                    >
+                      <Icon size={18} />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+
           <div className="dataset-picker filter-panel">
+            <div className="nav-group-title">Filtres globaux</div>
             <label htmlFor="dataset-select">Categorie dataset</label>
             <select id="dataset-select" value={datasetFilter} onChange={(event) => setDatasetFilter(event.target.value)}>
               <option value="all">Toutes</option>
@@ -860,31 +1021,6 @@ export default function Home() {
               ))}
             </select>
           </div>
-
-          <nav className="nav" aria-label="Navigation principale">
-            {navGroups.map((group) => (
-              <div className="nav-group" key={group.title}>
-                <div className="nav-group-title">{group.title}</div>
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const locked = Boolean(item.adminOnly && !isAdminLoggedIn);
-                  return (
-                    <button
-                      className={["nav-button", view === item.id ? "active" : "", locked ? "locked" : ""].join(" ")}
-                      disabled={locked}
-                      key={item.id}
-                      onClick={() => setView(item.id)}
-                      title={locked ? "Connexion admin requise" : item.label}
-                      type="button"
-                    >
-                      <Icon size={18} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
         </aside>
       ) : null}
 
@@ -892,7 +1028,7 @@ export default function Home() {
         <div className="topbar">
           <div>
             <h1>{activeTitle[view]}</h1>
-            <p>Client, fournisseur, administrateur et Data & ML sur les tables Gold.</p>
+            <p>{activeDescription[view]}</p>
           </div>
           <div className="status">
             <button className="button secondary" onClick={() => setSidebarOpen((current) => !current)} type="button">
@@ -924,11 +1060,23 @@ export default function Home() {
         {!loading && !error && view === "admin" ? (
           <AdminPage
             categories={scopedCategoryKpis}
+            dataQualityReport={dashboard?.data_quality_report ?? null}
             kpis={visibleKpis}
             problematicProducts={problematicProducts}
             riskySuppliers={riskySuppliers}
             sentimentRows={sentimentRows}
             onSelectProduct={selectProduct}
+          />
+        ) : null}
+
+        {!loading && !error && view === "analytics" ? (
+          <AnalyticsPage
+            categories={scopedCategoryKpis}
+            dataQualityReport={dashboard?.data_quality_report ?? null}
+            kpis={visibleKpis}
+            products={scopedProducts}
+            riskySuppliers={riskySuppliers}
+            sentimentRows={sentimentRows}
           />
         ) : null}
 
@@ -1019,6 +1167,7 @@ export default function Home() {
           <DataMlPage
             apiHealth={apiHealth}
             categories={scopedCategoryKpis}
+            dataQualityReport={dashboard?.data_quality_report ?? null}
             kpis={visibleKpis}
             onRunPipeline={runLiveTraining}
             pipelineLoading={pipelineLoading}
@@ -1037,6 +1186,7 @@ export default function Home() {
 
 function AdminPage({
   categories,
+  dataQualityReport,
   kpis,
   problematicProducts,
   riskySuppliers,
@@ -1044,6 +1194,7 @@ function AdminPage({
   onSelectProduct
 }: {
   categories: CategoryKpi[];
+  dataQualityReport: DataQualityReport | null;
   kpis: {
     total_reviews: number;
     total_products: number;
@@ -1057,10 +1208,49 @@ function AdminPage({
   sentimentRows: Array<{ sentiment: string; nb_reviews: number; avg_rating: number }>;
   onSelectProduct: (id: string) => void;
 }) {
+  const scale = dataQualityReport?.scale;
+  const reviewsByDataset = scale?.reviews_by_dataset ?? {};
+  const datasetsUnderTarget = scale?.datasets_under_target ?? {};
+  const minReviewsPerDataset = scale?.min_reviews_required_per_dataset ?? 1500000;
+  const datasetCount = Math.max(Object.keys(reviewsByDataset).length, 1);
+  const minimumTotalTarget = minReviewsPerDataset * datasetCount;
+  const scaleReady = scale?.status === "production_ready";
+  const sentimentChartRows = sentimentRows.map((row) => ({
+    label: row.sentiment,
+    value: row.nb_reviews,
+    color: row.sentiment === "positif" ? "#157f72" : row.sentiment === "negatif" ? "#c75832" : "#d28a25"
+  }));
+
   return (
     <section className="grid">
+      {!scaleReady ? (
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Volume donnees sous seuil manager</h2>
+            <span className="pill warn">Demo / insuffisant</span>
+          </div>
+          <div className="panel-body reviews">
+            <div className="review">
+              Objectif minimum : {number(minReviewsPerDataset)} avis par dataset, soit {number(minimumTotalTarget)} avis
+              minimum pour les {datasetCount} datasets actifs.
+            </div>
+            <div className="review">
+              Volume actuellement charge : {number(scale?.actual_reviews ?? kpis.total_reviews)} avis. Le modele actuel est
+              donc seulement une demonstration locale, pas l'entrainement final.
+            </div>
+            {Object.entries(reviewsByDataset).map(([domain, count]) => (
+              <div className="review" key={domain}>
+                {domain} : {number(count)} avis
+                {datasetsUnderTarget[domain] !== undefined ? " - sous 1 500 000" : " - seuil atteint"}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid metrics">
-        <Metric icon={ShoppingBag} label="Avis" value={number(kpis.total_reviews)} />
+        <Metric icon={ShoppingBag} label="Avis charges" value={number(kpis.total_reviews)} />
+        <Metric icon={Target} label="Objectif minimum" value={number(minimumTotalTarget)} />
         <Metric icon={PackageSearch} label="Produits" value={number(kpis.total_products)} />
         <Metric icon={Store} label="Fournisseurs" value={number(kpis.total_suppliers)} />
         <Metric icon={Star} label="Note moyenne" value={number(kpis.average_rating_global, 2)} />
@@ -1094,7 +1284,11 @@ function AdminPage({
             <h2>Sentiments</h2>
           </div>
           <div className="panel-body">
-            <BarList rows={sentimentRows} labelKey="sentiment" valueKey="nb_reviews" />
+            <DonutChart
+              centerLabel="avis"
+              centerValue={number(sentimentRows.reduce((sum, row) => sum + row.nb_reviews, 0))}
+              rows={sentimentChartRows}
+            />
           </div>
         </div>
       </div>
@@ -1107,6 +1301,186 @@ function AdminPage({
           scoreKey="risk_score"
           title="Produits problematiques"
         />
+      </div>
+    </section>
+  );
+}
+
+function AnalyticsPage({
+  categories,
+  dataQualityReport,
+  kpis,
+  products,
+  riskySuppliers,
+  sentimentRows
+}: {
+  categories: CategoryKpi[];
+  dataQualityReport: DataQualityReport | null;
+  kpis: {
+    total_reviews: number;
+    total_products: number;
+    total_suppliers: number;
+    total_categories: number;
+    average_rating_global: number;
+    negative_rate_global: number;
+  };
+  products: Product[];
+  riskySuppliers: Supplier[];
+  sentimentRows: Array<{ sentiment: string; nb_reviews: number; avg_rating: number }>;
+}) {
+  const scale = dataQualityReport?.scale;
+  const reviewsByDataset = scale?.reviews_by_dataset ?? {};
+  const minReviewsPerDataset = scale?.min_reviews_required_per_dataset ?? 1500000;
+  const datasetCount = Math.max(Object.keys(reviewsByDataset).length, 1);
+  const minimumTotalTarget = minReviewsPerDataset * datasetCount;
+  const years = [2020, 2021, 2022, 2023];
+  const sentimentChartRows = sentimentRows.map((row) => ({
+    label: row.sentiment,
+    value: row.nb_reviews,
+    color: row.sentiment === "positif" ? "#157f72" : row.sentiment === "negatif" ? "#c75832" : "#d28a25"
+  }));
+  const domainRows = Object.entries(
+    products.reduce<Record<string, number>>((acc, product) => {
+      acc[product.domain] = (acc[product.domain] ?? 0) + (product.nb_reviews ?? 0);
+      return acc;
+    }, {})
+  ).map(([domain, reviews]) => ({ domain, reviews }));
+  const trendRows = years.map((year) => {
+    const value = products.reduce((sum, product) => {
+      const min = product.min_review_year ?? year;
+      const max = product.max_review_year ?? year;
+      if (year < min || year > max) {
+        return sum;
+      }
+      return sum + Math.round((product.nb_reviews ?? 0) / Math.max(max - min + 1, 1));
+    }, 0);
+    return { label: String(year), value };
+  });
+  const decisionRows = ["Achetable", "A surveiller", "A eviter"].map((label, index) => ({
+    label,
+    value: products.filter((product) => decision(product) === label).length,
+    color: ["#157f72", "#d28a25", "#c75832"][index]
+  }));
+  const scoreRows = [
+    {
+      label: "Confiance moyenne",
+      value: products.reduce((sum, product) => sum + (product.confidence_score ?? buyability(product)), 0) / Math.max(products.length, 1),
+      color: "#157f72"
+    },
+    {
+      label: "Achat recommande",
+      value: products.reduce((sum, product) => sum + buyability(product), 0) / Math.max(products.length, 1),
+      color: "#496783"
+    },
+    {
+      label: "Potentiel futur",
+      value: products.reduce((sum, product) => sum + futurePotential(product), 0) / Math.max(products.length, 1),
+      color: "#6f7d2c"
+    },
+    {
+      label: "Risque moyen",
+      value: products.reduce((sum, product) => sum + (product.risk_score ?? 0), 0) / Math.max(products.length, 1),
+      color: "#c75832"
+    }
+  ];
+  const supplierRows = riskySuppliers.slice(0, 6).map((supplier) => ({
+    label: `${supplier.store} (${supplier.domain ?? "global"})`,
+    value: supplier.supplier_negative_rate ?? 0,
+    color: "#c75832"
+  }));
+
+  return (
+    <section className="grid">
+      <div className="grid metrics">
+        <Metric icon={ShoppingBag} label="Avis charges" value={number(kpis.total_reviews)} />
+        <Metric icon={Target} label="Objectif minimum" value={number(minimumTotalTarget)} />
+        <Metric icon={PackageSearch} label="Produits analyses" value={number(kpis.total_products)} />
+        <Metric icon={Store} label="Fournisseurs" value={number(kpis.total_suppliers)} />
+        <Metric icon={AlertTriangle} label="Taux negatif" value={pct(kpis.negative_rate_global)} />
+      </div>
+
+      <div className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Repartition des sentiments</h2>
+            <span className="pill">Pie chart</span>
+          </div>
+          <div className="panel-body">
+            <DonutChart centerLabel="avis" centerValue={number(kpis.total_reviews)} rows={sentimentChartRows} />
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Tendance des avis</h2>
+            <span className="pill">Trend</span>
+          </div>
+          <div className="panel-body">
+            <TrendChart rows={trendRows} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Volume par dataset</h2>
+          </div>
+          <div className="panel-body">
+            <BarList rows={domainRows} labelKey="domain" valueKey="reviews" />
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Scores moyens produit</h2>
+          </div>
+          <div className="panel-body">
+            <ScoreBars rows={scoreRows} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid two">
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Risque par categorie</h2>
+          </div>
+          <div className="panel-body">
+            <BarList
+              rows={categories
+                .slice()
+                .sort((a, b) => b.risk_score - a.risk_score)
+                .slice(0, 10)
+                .map((category) => ({
+                  label: `${category.domain} - ${category.main_category}`,
+                  value: category.risk_score
+                }))}
+              labelKey="label"
+              valueKey="value"
+              formatter={pct}
+            />
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Decision produit</h2>
+            <span className="pill">Pie chart</span>
+          </div>
+          <div className="panel-body">
+            <DonutChart centerLabel="produits" centerValue={number(products.length)} rows={decisionRows} />
+          </div>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Fournisseurs a risque</h2>
+        </div>
+        <div className="panel-body">
+          <ScoreBars rows={supplierRows} />
+        </div>
       </div>
     </section>
   );
@@ -1595,6 +1969,7 @@ function SupplierActionsPage({
 function DataMlPage({
   apiHealth,
   categories,
+  dataQualityReport,
   kpis,
   onRunPipeline,
   pipelineLoading,
@@ -1603,6 +1978,7 @@ function DataMlPage({
 }: {
   apiHealth: ApiHealth | null;
   categories: CategoryKpi[];
+  dataQualityReport: DataQualityReport | null;
   kpis: {
     total_reviews: number;
     total_products: number;
@@ -1615,6 +1991,12 @@ function DataMlPage({
   pipelineResult: PipelineRunResult | null;
   products: Product[];
 }) {
+  const scale = pipelineResult?.scale ?? dataQualityReport?.scale;
+  const reviewsByDataset = scale?.reviews_by_dataset ?? {};
+  const datasetsUnderTarget = scale?.datasets_under_target ?? {};
+  const minReviewsPerDataset = scale?.min_reviews_required_per_dataset ?? 1500000;
+  const scaleReady = scale?.status === "production_ready";
+
   return (
     <section className="grid">
       <div className="grid metrics">
@@ -1622,19 +2004,33 @@ function DataMlPage({
         <Metric icon={PackageSearch} label="Produits Gold" value={number(kpis.total_products)} />
         <Metric icon={Target} label="Categories Gold" value={number(kpis.total_categories)} />
         <Metric icon={CheckCircle2} label="Source API" value={apiHealth?.data_source?.active ?? "auto"} />
+        <Metric
+          icon={scaleReady ? CheckCircle2 : AlertTriangle}
+          label="Seuil par dataset"
+          value={number(minReviewsPerDataset)}
+          sub={scaleReady ? "Volume valide" : "Volume insuffisant"}
+        />
       </div>
 
       <div className="panel">
         <div className="panel-header">
-          <h2>Strategie progressive du dataset</h2>
-          <span className="pill">Architecture defendable</span>
+          <h2>Exigence volume manager</h2>
+          <span className={scaleReady ? "pill good" : "pill warn"}>
+            {scaleReady ? "Production" : "Sous seuil"}
+          </span>
         </div>
         <div className="panel-body timeline">
-          <div className="review">Amazon_Fashion : base deja realisee pour prouver le pipeline.</div>
-          <div className="review">Pipeline valide : nettoyage, sentiment, KPIs, recommandations.</div>
-          <div className="review">Multi-categories leger : All_Beauty et Appliances pour verifier le modele commun.</div>
-          <div className="review">Multi-categories etendu : ajout progressif de categories plus volumineuses.</div>
-          <div className="review">Exploitation large : usage massif pour les KPIs, avec ML elargi par echantillons representatifs.</div>
+          <div className="review">Objectif : chaque dataset actif doit contenir entre 1 500 000 et 5 000 000 avis.</div>
+          <div className="review">
+            Le total attendu depend du nombre de datasets actifs : {number(minReviewsPerDataset)} avis minimum par dataset.
+          </div>
+          <div className="review">{scale?.message ?? "Rapport de volume indisponible."}</div>
+          {Object.entries(reviewsByDataset).map(([domain, count]) => (
+            <div className="review" key={domain}>
+              {domain} : {number(count)} avis
+              {datasetsUnderTarget[domain] !== undefined ? " - sous seuil manager" : " - seuil atteint"}
+            </div>
+          ))}
         </div>
       </div>
 

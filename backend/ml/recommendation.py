@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 
 from backend.config import GOLD_PRODUCT_KPIS_PATH, GOLD_PRODUCTS_PATH, GOLD_RECOMMENDATIONS_PATH
@@ -59,6 +61,13 @@ def build_recommendations(top_n: int = 5) -> pd.DataFrame:
         + " "
         + merged["categories"].fillna("")
     )
+    max_products = int(os.getenv("RECOMMENDATION_MAX_PRODUCTS", "2000"))
+    if max_products > 0 and len(merged) > max_products:
+        merged = (
+            merged.sort_values(["confidence_score", "popularity_score", "avg_rating"], ascending=[False, False, False])
+            .head(max_products)
+            .reset_index(drop=True)
+        )
 
     if len(merged) <= 1:
         recommendations = pd.DataFrame(

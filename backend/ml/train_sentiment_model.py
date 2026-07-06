@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from backend.config import (
@@ -51,6 +52,9 @@ def train_sentiment_model(model_path: Path = SENTIMENT_MODEL_PATH) -> dict[str, 
         ) from exc
 
     reviews = _load_training_data()
+    max_training_reviews = int(os.getenv("ML_MAX_TRAINING_REVIEWS", "200000"))
+    if max_training_reviews > 0 and len(reviews) > max_training_reviews:
+        reviews = reviews.sample(n=max_training_reviews, random_state=42)
     x = reviews["text"].astype(str)
     y = reviews["sentiment"].astype(str)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pandas as pd
@@ -86,9 +87,42 @@ def validate_products(products: pd.DataFrame) -> dict[str, Any]:
 def build_quality_report(reviews: pd.DataFrame, products: pd.DataFrame, source: str) -> dict[str, Any]:
     reviews_report = validate_reviews(reviews)
     products_report = validate_products(products)
-    status = "ok" if reviews_report["status"] == "ok" and products_report["status"] == "ok" else "warning"
+    schema_status = "ok" if reviews_report["status"] == "ok" and products_report["status"] == "ok" else "warning"
+    min_reviews = int(os.getenv("BIG_DATA_MIN_REVIEWS_PER_DATASET", os.getenv("BIG_DATA_MIN_REVIEWS", "1500000")))
+    uses_demo_data = ":demo" in source
+    review_count = int(len(reviews))
+    domain_counts = {
+        str(domain): int(count)
+        for domain, count in reviews["domain"].value_counts().sort_index().items()
+    } if "domain" in reviews else {}
+    domains_under_target = {
+        domain: count
+        for domain, count in domain_counts.items()
+        if count < min_reviews
+    }
+    scale_status = (
+        "production_ready"
+        if domain_counts and not uses_demo_data and not domains_under_target
+        else "under_target"
+    )
+    status = "ok" if schema_status == "ok" and scale_status == "production_ready" else "warning"
     return {
         "status": status,
+        "schema_status": schema_status,
         "source": source,
+        "scale": {
+            "status": scale_status,
+            "actual_reviews": review_count,
+            "reviews_by_dataset": domain_counts,
+            "datasets_under_target": domains_under_target,
+            "min_reviews_required_per_dataset": min_reviews,
+            "target_range_reviews_per_dataset": "1500000-5000000",
+            "uses_demo_data": uses_demo_data,
+            "message": (
+                "Chaque dataset actif atteint le volume exige par le manager."
+                if scale_status == "production_ready"
+                else "Au moins un dataset est en demonstration ou sous 1500000 avis: charger Amazon Reviews 2023 reel dans data/bronze."
+            ),
+        },
         "checks": [reviews_report, products_report],
     }

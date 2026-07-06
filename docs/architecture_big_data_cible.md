@@ -335,10 +335,25 @@ tests
 ### Phase 2 - Ajouter un vrai echantillon Amazon_Fashion
 
 ```text
-Telecharger un echantillon reel Amazon_Fashion
+Telecharger un vrai volume Amazon Reviews 2023
 Le placer dans data/bronze
 Relancer python scripts/run_pipeline.py
 Comparer les resultats demo vs donnees reelles
+```
+
+Seuil manager applique dans le projet :
+
+```text
+Amazon_Fashion >= 1 500 000 avis
+Beauty_and_Personal_Care >= 1 500 000 avis
+Appliances     >= 1 500 000 avis
+Electronics    >= 1 500 000 avis
+```
+
+Commande :
+
+```bash
+python scripts/download_amazon_reviews_2023.py --reviews-per-category 1500000 --chunk-size 100000 --overwrite
 ```
 
 ### Phase 3 - Passer au traitement Spark complet

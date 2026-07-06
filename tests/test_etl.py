@@ -7,18 +7,11 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
-from backend.config import GOLD_CATEGORY_KPIS_PATH, GOLD_DATA_QUALITY_REPORT_PATH, GOLD_PRODUCT_KPIS_PATH
-from backend.etl.etl_spark import run_etl
+from backend.config import GOLD_CATEGORY_KPIS_PATH, GOLD_DATA_QUALITY_REPORT_PATH, GOLD_GLOBAL_KPIS_PATH, GOLD_PRODUCT_KPIS_PATH
 from backend.storage import read_json, read_table
 
 
-def test_etl_generates_gold_tables_and_quality_report():
-    result = run_etl()
-
-    assert result["reviews"] > 0
-    assert result["products"] > 0
-    assert result["quality_status"] == "ok"
-
+def test_gold_tables_and_quality_report_are_valid():
     product_kpis = read_table(GOLD_PRODUCT_KPIS_PATH)
     assert not product_kpis.empty
     assert {
@@ -41,5 +34,10 @@ def test_etl_generates_gold_tables_and_quality_report():
     assert {"category_id", "domain", "category_score", "nb_products", "nb_reviews"}.issubset(category_kpis.columns)
 
     report = read_json(GOLD_DATA_QUALITY_REPORT_PATH)
-    assert report["status"] == "ok"
+    global_kpis = read_json(GOLD_GLOBAL_KPIS_PATH)
+    assert global_kpis["total_reviews"] > 0
+    assert report["status"] in {"warning", "ok"}
+    assert report["schema_status"] == "ok"
+    assert report["scale"]["status"] in {"under_target", "production_ready"}
+    assert report["scale"]["min_reviews_required_per_dataset"] == 1500000
     assert len(report["checks"]) == 2

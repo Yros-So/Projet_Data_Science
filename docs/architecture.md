@@ -7,7 +7,7 @@ Amazon Reviews 2023 / donnees demo multi-categories
         |
         v
 Bronze : donnees brutes par categorie
-Amazon_Fashion / All_Beauty / Appliances
+Amazon_Fashion / Beauty_and_Personal_Care / Appliances / Electronics
         |
         v
 ETL Python compatible PySpark

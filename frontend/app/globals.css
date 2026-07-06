@@ -123,6 +123,7 @@ button {
 .nav {
   display: grid;
   gap: 14px;
+  margin-bottom: 18px;
 }
 
 .nav-group {
@@ -208,7 +209,7 @@ button {
 }
 
 .metrics {
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
 .two {
@@ -427,6 +428,117 @@ tr:last-child td {
   height: 100%;
   border-radius: 8px;
   background: var(--accent);
+}
+
+.donut-layout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.donut {
+  display: grid;
+  place-items: center;
+  width: 170px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(23, 33, 47, 0.08);
+}
+
+.donut-center {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(23, 33, 47, 0.12);
+  text-align: center;
+}
+
+.donut-center strong {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.donut-center span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chart-legend,
+.score-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.legend-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.trend-chart {
+  overflow-x: auto;
+}
+
+.trend-chart svg {
+  display: block;
+  width: 100%;
+  min-width: 420px;
+  height: auto;
+}
+
+.axis {
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.trend-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.trend-point {
+  fill: #ffffff;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.trend-value {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.trend-label {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.score-bar {
+  display: grid;
+  gap: 7px;
+}
+
+.score-bar > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
 }
 
 .product-grid {
@@ -678,6 +790,11 @@ textarea {
 
   .bar-row {
     grid-template-columns: 1fr;
+  }
+
+  .donut-layout {
+    grid-template-columns: 1fr;
+    justify-items: center;
   }
 
   .score-filter,

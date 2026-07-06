@@ -7,24 +7,28 @@ CATEGORY_CONFIGS = [
         "enabled": True,
         "priority": 1,
         "expected_scale": "medium",
+        "target_reviews": 1500000,
     },
     {
-        "name": "All_Beauty",
+        "name": "Beauty_and_Personal_Care",
         "enabled": True,
         "priority": 2,
-        "expected_scale": "small",
+        "expected_scale": "large",
+        "target_reviews": 1500000,
     },
     {
         "name": "Appliances",
         "enabled": True,
         "priority": 3,
         "expected_scale": "medium",
+        "target_reviews": 1500000,
     },
     {
         "name": "Electronics",
-        "enabled": False,
+        "enabled": True,
         "priority": 4,
         "expected_scale": "large",
+        "target_reviews": 1500000,
     },
 ]
 

@@ -25,7 +25,9 @@ models/metrics/*
 .env
 .env.*
 !.env.example
+!frontend/.env.production
 logs/
+dist/
 
 # Frontend
 frontend/node_modules/

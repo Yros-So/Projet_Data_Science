@@ -7,7 +7,7 @@ Ce document relie le projet aux criteres attendus dans le sujet : dataset massif
 | Critere | Reponse du projet |
 | --- | --- |
 | Probleme metier | Analyse de satisfaction e-commerce, detection de produits problematiques et recommandation. |
-| Dataset Big Data | Amazon Reviews 2023, base pilote Amazon_Fashion puis multi-categories controle avec All_Beauty et Appliances. Le dataset complet contient plusieurs centaines de millions d'avis ; le projet montre une montee en charge progressive. |
+| Dataset Big Data | Amazon Reviews 2023, base pilote Amazon_Fashion puis multi-categories controle avec Beauty_and_Personal_Care, Appliances et Electronics. Le dataset complet contient plusieurs centaines de millions d'avis ; le projet montre une montee en charge progressive. |
 | Stockage | Architecture Bronze/Silver/Gold en fichiers Parquet ; PostgreSQL optionnel pour les tables finales. |
 | ETL | Pipeline `backend/etl/etl_spark.py` generique par categorie avec `domain`, `global_product_id`, sentiment, jointure et KPIs. |
 | Qualite donnees | Rapport `data/gold/global_dashboard/data_quality_report.json` avec colonnes attendues, null rates, notes valides et unicite produits. |
@@ -28,6 +28,7 @@ Le mode demonstration existe uniquement pour permettre de lancer le projet sans 
 Le pipeline est concu pour plusieurs categories activees progressivement.
 Si les fichiers reels sont absents, il genere un dataset demo multi-categories pour verifier l'application.
 Les donnees massives doivent etre placees dans data/bronze/{categorie}/reviews et data/bronze/{categorie}/metadata.
+Chaque dataset actif doit contenir au moins 1 500 000 avis pour satisfaire l'exigence manager.
 ```
 
 Chemins attendus :
@@ -35,9 +36,24 @@ Chemins attendus :
 ```text
 data/bronze/Amazon_Fashion/reviews/
 data/bronze/Amazon_Fashion/metadata/
-data/bronze/All_Beauty/reviews/
-data/bronze/All_Beauty/metadata/
+data/bronze/Beauty_and_Personal_Care/reviews/
+data/bronze/Beauty_and_Personal_Care/metadata/
+data/bronze/Appliances/reviews/
+data/bronze/Appliances/metadata/
+data/bronze/Electronics/reviews/
+data/bronze/Electronics/metadata/
 ```
+
+Commande de preparation Big Data :
+
+```bash
+python scripts/download_amazon_reviews_2023.py --reviews-per-category 1500000 --chunk-size 100000 --overwrite
+python scripts/run_pipeline.py
+```
+
+Avec les 4 datasets actifs, le seuil minimal devient `6 000 000` avis traites. Le fichier `data/gold/global_dashboard/data_quality_report.json` expose `scale.status`, `reviews_by_dataset` et `datasets_under_target` pour prouver le volume.
+
+La table `reviews_sample` est seulement une table applicative pour afficher des exemples d'avis. L'entrainement ML lit `data/silver/reviews_clean`, donc le modele utilise le volume complet nettoye apres chargement Bronze reel.
 
 La version actuelle est volontairement un MVP local. Elle prouve la logique complete, mais ne pretend pas encore traiter les centaines de millions d'avis du dataset complet. L'architecture de passage au vrai Big Data est decrite dans :
 

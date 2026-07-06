@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from backend.api.data_access import global_kpis, records, table
+from backend.api.data_access import data_quality_report, global_kpis, records, table
 from backend.api.query_filters import filter_exact, filter_risk
 
 
@@ -25,11 +25,12 @@ def admin_dashboard(domain: str | None = None, risk: str | None = None):
 
     return {
         "global_kpis": global_kpis(),
+        "data_quality_report": data_quality_report(),
         "sentiment_stats": records(sentiment_stats),
         "top_products": records(product_kpis.sort_values("popularity_score", ascending=False).head(8)),
         "problematic_products": records(product_kpis.sort_values("risk_score", ascending=False).head(8)),
         "supplier_ranking": records(supplier_kpis.sort_values("supplier_score", ascending=False).head(8)),
-        "categories": records(categories),
+        "categories": records(categories.head(50)),
     }
 
 

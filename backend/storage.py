@@ -28,7 +28,13 @@ def write_table(df: pd.DataFrame, path: Path) -> Path:
 def read_table(path: Path) -> pd.DataFrame:
     if path.exists():
         if path.suffix == ".parquet":
-            return pd.read_parquet(path)
+            try:
+                return pd.read_parquet(path)
+            except Exception:
+                fallback = _csv_fallback_path(path)
+                if fallback.exists():
+                    return pd.read_csv(fallback)
+                raise
         return pd.read_csv(path)
 
     fallback = _csv_fallback_path(path)
@@ -48,9 +54,10 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def to_json_records(df: pd.DataFrame) -> list[dict[str, Any]]:
-    clean = df.where(pd.notnull(df), None).copy()
+    clean = df.copy()
     for column in clean.columns:
         if pd.api.types.is_datetime64_any_dtype(clean[column]):
             clean[column] = clean[column].astype(str)
+    clean = clean.replace([float("inf"), float("-inf")], None)
+    clean = clean.astype(object).where(pd.notnull(clean), None)
     return clean.to_dict(orient="records")
-

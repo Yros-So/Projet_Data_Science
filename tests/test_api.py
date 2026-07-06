@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
+os.environ.setdefault("API_DATA_SOURCE", "files")
 
 from fastapi.testclient import TestClient
 
@@ -21,6 +23,7 @@ def test_api_core_endpoints():
     dashboard = client.get("/admin/dashboard")
     assert dashboard.status_code == 200
     assert "global_kpis" in dashboard.json()
+    assert "data_quality_report" in dashboard.json()
 
     products = client.get("/products?limit=3")
     assert products.status_code == 200

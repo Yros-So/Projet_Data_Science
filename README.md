@@ -71,8 +71,9 @@ Par defaut :
 
 ```text
 Amazon_Fashion
-All_Beauty
+Beauty_and_Personal_Care
 Appliances
+Electronics
 ```
 
 Le projet attend les vrais fichiers Amazon Reviews 2023 dans la structure progressive :
@@ -80,10 +81,12 @@ Le projet attend les vrais fichiers Amazon Reviews 2023 dans la structure progre
 ```text
 data/bronze/Amazon_Fashion/reviews/
 data/bronze/Amazon_Fashion/metadata/
-data/bronze/All_Beauty/reviews/
-data/bronze/All_Beauty/metadata/
+data/bronze/Beauty_and_Personal_Care/reviews/
+data/bronze/Beauty_and_Personal_Care/metadata/
 data/bronze/Appliances/reviews/
 data/bronze/Appliances/metadata/
+data/bronze/Electronics/reviews/
+data/bronze/Electronics/metadata/
 ```
 
 Les anciens chemins `data/bronze/raw_review_Amazon_Fashion/` et `data/bronze/raw_meta_Amazon_Fashion/` restent compatibles pour ne pas casser l'etape deja faite.
@@ -91,6 +94,84 @@ Les anciens chemins `data/bronze/raw_review_Amazon_Fashion/` et `data/bronze/raw
 Formats acceptes par le MVP : Parquet, CSV, JSON ou JSONL.
 
 Si ces dossiers sont vides, le pipeline genere automatiquement un jeu de donnees de demonstration multi-categories. Cela permet de tester tout le projet localement sans telecharger plusieurs Go de donnees.
+
+## Mode Big Data attendu par le manager
+
+Le mode demo local n'est pas suffisant pour entrainer un modele defendable. L'objectif manager est :
+
+```text
+Amazon_Fashion >= 1 500 000 avis
+Beauty_and_Personal_Care >= 1 500 000 avis
+Appliances     >= 1 500 000 avis
+Electronics    >= 1 500 000 avis
+```
+
+Soit au minimum `6 000 000` avis traites si les 4 datasets actifs sont utilises. Le rapport qualite passe en `warning` tant qu'un dataset reste sous ce seuil.
+
+Pour remplir la couche Bronze depuis Amazon Reviews 2023 :
+
+```bash
+pip install -r requirements.txt
+python scripts/download_amazon_reviews_2023.py --reviews-per-category 1500000 --chunk-size 100000 --overwrite
+python scripts/run_pipeline.py
+```
+
+Pour viser la borne haute demandee :
+
+```bash
+python scripts/download_amazon_reviews_2023.py --reviews-per-category 5000000 --chunk-size 100000 --overwrite
+python scripts/run_pipeline.py
+```
+
+Pour viser `20 000 000` avis au total avec des datasets qui restent tous en millions :
+
+```bash
+python scripts/download_amazon_reviews_2023.py --categories Amazon_Fashion Beauty_and_Personal_Care Appliances Electronics --category-targets Amazon_Fashion=2000000 Beauty_and_Personal_Care=8000000 Appliances=2000000 Electronics=8000000 --chunk-size 100000 --overwrite
+python scripts/run_pipeline.py
+```
+
+Ces commandes telechargent plusieurs Go de donnees depuis Hugging Face et peuvent prendre longtemps selon la connexion et le disque. L'API et le frontend ne doivent jamais charger les millions de lignes directement : ils consomment les tables Gold agregees produites par le pipeline.
+
+Important : `data/gold/reviews_sample` sert uniquement a afficher quelques avis dans l'interface. Le modele de sentiment s'entraine sur `data/silver/reviews_clean`, donc sur le volume complet nettoye lorsque les fichiers Bronze reels ont ete charges.
+
+## Creer un ZIP propre pour le rendu
+
+Ne pas livrer les dossiers generes localement (`frontend/node_modules`, `frontend/.next`, `.git`, `logs`, caches, `data/postgres_local`, donnees Bronze/Silver/Gold massives). Utiliser le script dedie :
+
+```bash
+python scripts/create_submission_zip.py
+```
+
+Le fichier est cree dans :
+
+```text
+dist/Projet_Data_Science_IBRA_clean.zip
+```
+
+Le ZIP contient le code, la documentation, les tests, les notebooks et les fichiers de configuration necessaires pour reconstruire le projet avec `pip install -r requirements.txt`, `npm install`, puis les scripts de pipeline.
+
+## Deploiement Cloudflare Pages
+
+Le frontend peut etre deploye sur Cloudflare Pages en mode statique. Comme Cloudflare Pages n'execute pas FastAPI Python, le build de production utilise une API statique exportee depuis les tables Gold actuelles :
+
+```bash
+python scripts/export_static_api.py
+cd frontend
+npm install
+npm run build
+npx wrangler pages deploy out --project-name projet-data-science-ibra
+```
+
+Fichiers importants :
+
+```text
+frontend/.env.production        active NEXT_PUBLIC_STATIC_API=true
+frontend/next.config.mjs        export statique Next.js
+frontend/wrangler.toml          configuration Cloudflare Pages
+frontend/public/static-api/     JSON demo pour le deploiement Cloudflare
+```
+
+En local, `npm run dev` continue d'utiliser l'API FastAPI (`http://127.0.0.1:8000`) tant que `NEXT_PUBLIC_STATIC_API` n'est pas active.
 
 ## Nature des tables Bronze, Silver, Gold et PostgreSQL
 
@@ -112,8 +193,8 @@ Exemples :
 ```text
 data/bronze/Amazon_Fashion/reviews/
 data/bronze/Amazon_Fashion/metadata/
-data/bronze/All_Beauty/reviews/
-data/bronze/All_Beauty/metadata/
+data/bronze/Beauty_and_Personal_Care/reviews/
+data/bronze/Beauty_and_Personal_Care/metadata/
 ```
 
 Utilite :
@@ -332,8 +413,9 @@ La sidebar permet de choisir le dataset actif :
 ```text
 Tous les datasets
 Amazon_Fashion
-All_Beauty
+Beauty_and_Personal_Care
 Appliances
+Electronics
 ```
 
 Le catalogue permet de differencier clairement les produits :

@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from backend.config import (
     GOLD_CATEGORY_KPIS_PATH,
+    GOLD_DATA_QUALITY_REPORT_PATH,
     GOLD_GLOBAL_KPIS_PATH,
     GOLD_PROBLEMATIC_PRODUCTS_PATH,
     GOLD_PRODUCT_KPIS_PATH,
@@ -74,7 +75,7 @@ def _postgres_table_ready(table_name: str) -> bool:
             result = connection.execute(text(f'SELECT 1 FROM "{table_name}" LIMIT 1'))
             result.fetchone()
         return True
-    except SQLAlchemyError:
+    except Exception:
         return False
 
 
@@ -142,17 +143,41 @@ def global_kpis() -> dict[str, Any]:
     return read_json(GOLD_GLOBAL_KPIS_PATH)
 
 
+@lru_cache(maxsize=1)
+def data_quality_report() -> dict[str, Any]:
+    ensure_gold_data()
+    if active_data_source() == "postgres":
+        try:
+            data = pd.read_sql_query('SELECT * FROM "data_quality_report" LIMIT 1', _postgres_engine())
+            if data.empty:
+                return {}
+            payload = data.iloc[0].where(pd.notnull(data.iloc[0]), None).to_dict()
+            raw_payload = payload.get("payload")
+            if isinstance(raw_payload, str):
+                try:
+                    return json.loads(raw_payload)
+                except json.JSONDecodeError:
+                    return payload
+            return payload
+        except SQLAlchemyError:
+            return {}
+    return read_json(GOLD_DATA_QUALITY_REPORT_PATH)
+
+
 def clear_cache() -> None:
     table.cache_clear()
     global_kpis.cache_clear()
+    data_quality_report.cache_clear()
     _postgres_engine.cache_clear()
 
 
 def data_source_status() -> dict[str, Any]:
+    configured = configured_data_source()
+    active = active_data_source()
     return {
-        "configured": configured_data_source(),
-        "active": active_data_source(),
-        "postgres_ready": _postgres_ready(),
+        "configured": configured,
+        "active": active,
+        "postgres_ready": _postgres_ready() if configured in {"auto", "postgres"} else False,
     }
 
 

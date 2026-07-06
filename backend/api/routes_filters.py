@@ -8,10 +8,10 @@ from backend.api.data_access import table
 router = APIRouter(prefix="/filters", tags=["filters"])
 
 
-def _unique_values(dataframe, column: str) -> list:
+def _unique_values(dataframe, column: str, limit: int = 500) -> list:
     if column not in dataframe.columns:
         return []
-    values = dataframe[column].dropna().astype(str).unique().tolist()
+    values = dataframe[column].dropna().astype(str).value_counts().head(limit).index.tolist()
     return sorted(values)
 
 
