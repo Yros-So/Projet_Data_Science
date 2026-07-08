@@ -4,7 +4,7 @@ scikit-learn==1.7.2
 joblib==1.5.2
 fastapi==0.124.0
 uvicorn[standard]==0.38.0
-requests==2.32.5
+requests==2.33.0
 python-dotenv==1.2.1
 sqlalchemy==2.0.44
 psycopg2-binary==2.9.11
