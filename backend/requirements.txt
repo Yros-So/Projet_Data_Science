@@ -1,7 +1,7 @@
 datasets
 huggingface_hub
 pandas>=2.2
-pyarrow>=16.0
+pyarrow>=23.0.1
 duckdb
 scikit-learn>=1.5
 tqdm
